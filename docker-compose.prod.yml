@@ -1,0 +1,46 @@
+# Production stack: Gunicorn + Celery + Postgres + Redis + Nginx (serves the built SPA, proxies /api and /media).
+# Usage: docker compose -f docker-compose.prod.yml up -d --build   (needs a .env file, see .env.example)
+x-backend-env: &backend-env
+  DATABASE_HOST: db
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+  PORT: "8000"
+  SERVE_MEDIA: "False"
+
+services:
+  db:
+    image: postgres:16-alpine
+    env_file: .env
+    environment: {POSTGRES_DB: "${DATABASE_NAME}", POSTGRES_USER: "${DATABASE_USER}", POSTGRES_PASSWORD: "${DATABASE_PASSWORD}"}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER}"]
+      interval: 5s
+      retries: 10
+    restart: always
+  redis:
+    image: redis:7-alpine
+    restart: always
+  backend:
+    build: ./backend
+    env_file: .env
+    environment: *backend-env
+    volumes: [media:/app/media]
+    depends_on: {db: {condition: service_healthy}, redis: {condition: service_started}}
+    restart: always
+  celery:
+    build: ./backend
+    entrypoint: ["celery", "-A", "config", "worker", "-l", "info"]
+    env_file: .env
+    environment: *backend-env
+    volumes: [media:/app/media]
+    depends_on: [backend]
+    restart: always
+  nginx:
+    build: {context: ., dockerfile: docker/nginx.Dockerfile}
+    ports: ["80:80"]
+    volumes: [media:/media:ro]
+    depends_on: [backend]
+    restart: always
+volumes: {pgdata: {}, media: {}}

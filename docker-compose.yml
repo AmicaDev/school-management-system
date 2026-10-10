@@ -1,0 +1,37 @@
+# Development stack. For production use docker-compose.prod.yml (see docs/DEPLOYMENT.md).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-school_db}
+      POSTGRES_USER: ${DATABASE_USER:-school_user}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-school_user}"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+  backend:
+    build: ./backend
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    env_file: .env
+    environment: {DATABASE_HOST: db, REDIS_URL: "redis://redis:6379/0", CELERY_BROKER_URL: "redis://redis:6379/1", CELERY_RESULT_BACKEND: "redis://redis:6379/2"}
+    volumes: ["./backend:/app", media:/app/media]
+    ports: ["8000:8000"]
+    depends_on: {db: {condition: service_healthy}, redis: {condition: service_started}}
+  celery:
+    build: ./backend
+    entrypoint: ["celery", "-A", "config", "worker", "-l", "info"]
+    env_file: .env
+    environment: {DATABASE_HOST: db, REDIS_URL: "redis://redis:6379/0", CELERY_BROKER_URL: "redis://redis:6379/1", CELERY_RESULT_BACKEND: "redis://redis:6379/2"}
+    depends_on: [backend]
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host"
+    environment: {VITE_API_BASE_URL: "http://localhost:8000/api/v1"}
+    volumes: ["./frontend:/app"]
+    ports: ["5173:5173"]
+volumes: {pgdata: {}, media: {}}
