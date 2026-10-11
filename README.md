@@ -48,9 +48,9 @@ python manage.py check
 python manage.py migrate
 python manage.py makemigrations --check --dry-run
 python manage.py test tests
-python manage.py create_initial_user --role ADMIN --username school-admin --email admin@example.com
+python manage.py create_initial_user --role ADMIN --username KIYINGI_MEMORIAL_SECONDARY_SCHOOL --email memorialkiyingi06@gmail.com #pass: kiyingiadmin
 # Optional developer/testing account; enter a unique username and email.
-python manage.py create_initial_user --role DEVELOPER --username school-developer --email developer@example.com
+python manage.py create_initial_user --role DEVELOPER --username AmicaDev --email ojukajames0@gmail.com
 python manage.py runserver
 ```
 

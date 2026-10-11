@@ -61,6 +61,17 @@ class AuthTests(Base):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["user"]["username"], "p1")
 
+    def test_teacher_logs_in_with_assigned_subject_and_paper_code(self):
+        TeachingAssignment.objects.filter(teacher=self.t1, subject=self.maths).update(teacher_subject_code="P221")
+        r = self.client.post("/api/v1/auth/login/", {"username": "Maths", "password": "P221"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["user"]["username"], "t1")
+
+    def test_teacher_subject_login_requires_matching_assigned_code(self):
+        TeachingAssignment.objects.filter(teacher=self.t1, subject=self.maths).update(teacher_subject_code="P221")
+        r = self.client.post("/api/v1/auth/login/", {"username": "Maths", "password": "wrong"}, format="json")
+        self.assertEqual(r.status_code, 401)
+
     def test_password_is_hashed(self):
         self.assertNotEqual(self.admin.password, PW)
         self.assertTrue(self.admin.password.startswith("pbkdf2_"))
@@ -111,7 +122,7 @@ class StudentTests(Base):
     def test_admin_crud_and_archive(self):
         self.login("adm")
         r = self.client.post("/api/v1/students/", {"first_name": "N", "last_name": "Pupil", "gender": "F", "stream": self.stream.id,
-                                                  "parent_ids": [self.p1.id]}, format="json")
+                                                  "index_no": "S3", "parent_ids": [self.p1.id]}, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(Student.objects.get(pk=r.data["id"]).index_no, r.data["index_no"])
         self.assertTrue(r.data["index_no"])
@@ -127,6 +138,12 @@ class StudentTests(Base):
         self.client.delete(f"/api/v1/students/{sid}/")
         self.assertEqual(self.client.delete(f"/api/v1/students/{sid}/permanent-delete/").status_code, 204)
         self.assertFalse(Student.objects.filter(pk=sid).exists())
+
+    def test_admin_must_assign_index_number(self):
+        self.login("adm")
+        r = self.client.post("/api/v1/students/", {"first_name": "N", "last_name": "Pupil", "gender": "F"}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("index_no", r.data)
 
     def test_teacher_crud(self):
         self.login("adm")
@@ -195,7 +212,7 @@ class StudentBehaviorTests(Base):
     def test_candidate_number_is_optional_and_unique(self):
         self.login("adm")
         data = {"first_name": "Candidate", "last_name": "Four", "gender": "F", "stream": self.stream.id,
-                "candidate_no": "U12345"}
+                "index_no": "CAND04", "candidate_no": "U12345"}
         created = self.client.post("/api/v1/students/", data, format="json")
         self.assertEqual(created.status_code, 201, created.content)
         self.assertTrue(created.data["index_no"])
@@ -355,6 +372,13 @@ class CommsTests(Base):
         enquiry_id = created.data["id"]
         message_id = created.data["messages"][0]["id"]
         self.assertEqual(created.data["student_name"], self.s1.full_name)
+        self.client.force_authenticate(user=self.p1)
+        self.assertEqual(self.client.post(f"/api/v1/enquiries/{enquiry_id}/typing/", {"typing": True},
+                                          format="json").status_code, 200)
+        self.client.force_authenticate(user=self.admin)
+        typing = self.client.get(f"/api/v1/enquiries/{enquiry_id}/typing/")
+        self.assertEqual(typing.status_code, 200)
+        self.assertEqual(typing.data[0]["id"], self.p1.id)
         self.client.force_authenticate(user=self.t1)
         self.assertEqual(self.client.get("/api/v1/enquiries/").data["count"], 1)
         self.assertEqual(self.client.post(f"/api/v1/enquiries/{enquiry_id}/reply/", {"body": "I will follow up."},

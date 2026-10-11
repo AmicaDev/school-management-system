@@ -1,5 +1,4 @@
 from django.db import transaction
-from django.utils import timezone
 from rest_framework import serializers
 
 from apps.academics.models import Stream
@@ -15,7 +14,7 @@ class StudentSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source="stream.school_class.name", read_only=True, default=None)
     parent_ids = serializers.PrimaryKeyRelatedField(source="parents", many=True, required=False,
                                                     queryset=User.objects.filter(role="PARENT"))
-    index_no = serializers.CharField(required=False, allow_blank=True)
+    index_no = serializers.CharField(required=True, allow_blank=False)
     candidate_no = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
@@ -26,13 +25,6 @@ class StudentSerializer(serializers.ModelSerializer):
 
     def get_stream_label(self, obj):
         return str(obj.stream) if obj.stream_id else None
-
-    def create(self, validated):
-        with transaction.atomic():
-            if not validated.get("index_no"):
-                last = Student.objects.select_for_update().order_by("-id").first()
-                validated["index_no"] = f"S{timezone.now().year}{(last.id + 1 if last else 1):05d}"
-            return super().create(validated)
 
     def validate_index_no(self, v):
         qs = Student.objects.filter(index_no__iexact=v)

@@ -1,4 +1,5 @@
 from django.contrib.auth import password_validation
+from django.db.models import Q
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -6,17 +7,38 @@ from .models import User
 
 
 class LoginSerializer(TokenObtainPairSerializer):
-    """Accepts a username, or (for parents) a student index number as the identifier."""
+    """Accepts usernames, parent student indexes, and assigned teacher subject codes."""
 
     def validate(self, attrs):
         ident = attrs.get(self.username_field, "")
         if ident and not User.objects.filter(username__iexact=ident).exists():
+            from apps.academics.models import TeachingAssignment
             from apps.people.models import Student
+
             student = Student.objects.filter(index_no__iexact=ident, is_archived=False).first()
             if student:
                 parents = list(student.parents.filter(is_active=True)[:2])
                 if len(parents) == 1:
                     attrs[self.username_field] = parents[0].username
+            elif attrs.get("password"):
+                teacher_ids = list(
+                    TeachingAssignment.objects.filter(
+                        subject__name__iexact=ident,
+                        teacher_subject_code__iexact=attrs.get("password", ""),
+                        teacher__role=User.Role.TEACHER,
+                        teacher__is_active=True,
+                    ).filter(
+                        Q(teacher__teacher_profile__isnull=True) | Q(teacher__teacher_profile__is_archived=False)
+                    ).values_list("teacher_id", flat=True).distinct()[:2]
+                )
+                if len(teacher_ids) == 1:
+                    self.user = User.objects.get(pk=teacher_ids[0])
+                    refresh = self.get_token(self.user)
+                    return {
+                        "refresh": str(refresh),
+                        "access": str(refresh.access_token),
+                        "user": UserSerializer(self.user).data,
+                    }
         data = super().validate(attrs)
         data["user"] = UserSerializer(self.user).data
         return data

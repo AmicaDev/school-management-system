@@ -39,9 +39,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -63,7 +63,7 @@ TEMPLATES = [{
 
 def _database_from_url(url):
     u = urlparse(url)
-    cfg = {"ENGINE": "django.db.backends.postgresql", "NAME": u.path.lstrip("/"), "USER": unquote(u.username or ""),"PASSWORD": unquote(u.password or ""), "HOST": u.hostname or "", "PORT": str(u.port or 5432), "CONN_MAX_AGE": 60}
+    cfg = {"ENGINE": "django.db.backends.postgresql", "NAME": u.path.lstrip("/"), "USER": unquote(u.username or ""),"PASSWORD": unquote(u.password or ""), "HOST": u.hostname or "", "PORT": str(u.port or 5432), "CONN_MAX_AGE": 60, "CONN_HEALTH_CHECKS": True}
     if os.environ.get("DATABASE_SSL_REQUIRE", "False").lower() == "true":
         cfg["OPTIONS"] = {"sslmode": "require"}
     return cfg
@@ -82,6 +82,7 @@ else:
         "HOST": os.environ.get("DATABASE_HOST", "localhost"),
         "PORT": os.environ.get("DATABASE_PORT", "5432"),
         "CONN_MAX_AGE": 60,
+        "CONN_HEALTH_CHECKS": True,
     }}
 
 AUTH_USER_MODEL = "users.User"
@@ -119,7 +120,7 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend",
                                 "rest_framework.filters.SearchFilter", "rest_framework.filters.OrderingFilter"],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.AnonRateThrottle", "rest_framework.throttling.UserRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"anon": "60/min", "user": "600/min", "login": "10/min", "reset": "5/hour"},
+    "DEFAULT_THROTTLE_RATES": {"anon": "60/min", "user": "600/min", "login": "60/min", "reset": "5/hour"},
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "EXCEPTION_HANDLER": "apps.audit.handlers.exception_handler",
 }

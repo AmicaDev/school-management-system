@@ -105,14 +105,16 @@ def validate(kind, rows):
                     if not stream:
                         raise ValueError("unknown class/stream")
                 index_no = _s(r.get("index_no"))
+                if not index_no:
+                    raise ValueError("index_no is required; the administrator must assign it")
                 candidate_no = _s(r.get("candidate_no"))
+                key = (first.lower(), last.lower(), dob)
+                if key in existing_students or key in seen:
+                    dupes.append({"row": i, "name": f"{first} {last}"}); continue
                 if index_no and index_no.lower() in student_indexes:
                     raise ValueError("index_no is already in use")
                 if candidate_no and candidate_no.lower() in candidate_numbers:
                     raise ValueError("candidate_no is already in use")
-                key = (first.lower(), last.lower(), dob)
-                if key in existing_students or key in seen:
-                    dupes.append({"row": i, "name": f"{first} {last}"}); continue
                 seen.add(key)
                 seen.update(value.lower() for value in (index_no, candidate_no) if value)
                 if index_no:

@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
@@ -130,6 +131,29 @@ class EnquiryViewSet(viewsets.ModelViewSet):
         if self.request.query_params.get("archived") == "true":
             return qs.filter(archived_by=self.request.user).distinct()
         return qs.exclude(archived_by=self.request.user).distinct()
+
+    @action(detail=True, methods=["get", "post"])
+    def typing(self, request, pk=None):
+        enq = self.get_object()
+        key = f"enquiry:{enq.pk}:typing:{request.user.pk}"
+        if request.method == "POST":
+            if request.data.get("typing") is True:
+                cache.set(key, True, timeout=5)
+            else:
+                cache.delete(key)
+            return Response({"typing": request.data.get("typing") is True})
+
+        participant_ids = {enq.parent_id}
+        if request.user.role == User.Role.PARENT:
+            participant_ids.update(User.objects.filter(role=User.Role.ADMIN, is_active=True).values_list("id", flat=True))
+            class_teacher_id = enq.student.stream.class_teacher_id if enq.student_id and enq.student.stream_id else None
+            if class_teacher_id:
+                participant_ids.add(class_teacher_id)
+        participants = User.objects.filter(pk__in=participant_ids, is_active=True).exclude(pk=request.user.pk)
+        return Response([
+            {"id": user.pk, "full_name": user.full_name, "role": user.role}
+            for user in participants if cache.get(f"enquiry:{enq.pk}:typing:{user.pk}")
+        ])
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):

@@ -17,8 +17,8 @@ class ImportTests(Base):
 
     def test_student_csv_validate_then_import(self):
         self.login("adm")
-        csv_bytes = ("first_name,last_name,gender,date_of_birth,class,stream\n"
-                     "Ann,New,F,2015-03-02,P1,A\nBad,Row,X,,,\nC,Three,M,,,\n").encode()
+        csv_bytes = ("first_name,last_name,gender,date_of_birth,class,stream,index_no\n"
+                     "Ann,New,F,2015-03-02,P1,A,ANN01\nBad,Row,X,,,,BAD02\nC,Three,M,,,,C003\n").encode()
         r = self.upload("students", "s.csv", csv_bytes)
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual((r.data["valid"], len(r.data["invalid"])), (2, 1))
