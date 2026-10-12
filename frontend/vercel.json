@@ -4,7 +4,18 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  
+"rewrites": [
+  {
+    "source": "/api/v1/:path*",
+    "destination": "https://school-api-67oy.onrender.com/api/v1/:path*"
+  },
+  {
+    "source": "/(.*)",
+    "destination": "/index.html"
+  }
+],
+
   "headers": [
     { "source": "/sw.js", "headers": [
       { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
