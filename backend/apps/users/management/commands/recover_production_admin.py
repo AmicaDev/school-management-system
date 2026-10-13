@@ -1,10 +1,12 @@
 import getpass
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth import password_validation
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
 
 from apps.users.models import User
 
@@ -21,7 +23,7 @@ class Command(BaseCommand):
         database = settings.DATABASES["default"]
         if not options["confirm_production"]:
             raise CommandError("Pass --confirm-production to confirm this production operation.")
-        if settings.DEBUG or settings.ENVIRONMENT.lower() != "production":
+        if settings.DEBUG or settings.ENVIRONMENT.lower() != "production" or not os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
             raise CommandError("Set DJANGO_DEBUG=False and DJANGO_ENVIRONMENT=production.")
         if database["ENGINE"] != "django.db.backends.postgresql":
             raise CommandError("Refusing to run: the configured database is not PostgreSQL.")
@@ -34,8 +36,13 @@ class Command(BaseCommand):
         user = User.objects.filter(username=username).first()
         if user is None and User.objects.filter(username__iexact=username).exists():
             raise CommandError("A username differing only by letter case already exists.")
-        if user and user.role != User.Role.ADMIN and not user.is_superuser:
+        if user and user.role != User.Role.ADMIN:
             raise CommandError("Refusing to take over an existing non-admin account.")
+        if user and not user.is_active and (
+            not user.admin_deactivated_at
+            or not timezone.now() - timedelta(days=30) <= user.admin_deactivated_at <= timezone.now()
+        ):
+            raise CommandError("This administrator was not deactivated within the past 30 days.")
 
         password = getpass.getpass("New admin password: ")
         if not password or password != getpass.getpass("Confirm new admin password: "):

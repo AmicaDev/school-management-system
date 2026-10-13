@@ -29,7 +29,7 @@ const T = {}
 const P = {}
 ;['ParentDashboard', 'ChildrenList', 'ParentAttendance', 'ParentResults', 'ParentPerformance'].forEach((n) => { P[n] = lz(() => import('./features/parent'), n) })
 const D = {}
-;['DevDashboard', 'DevErrors', 'DevLogs', 'DevTests', 'DevDatabase', 'DevApi', 'DevPwa', 'DevSync', 'DevMaintenance', 'DevUpdates', 'DevAudit'].forEach((n) => { D[n] = lz(() => import('./features/developer'), n) })
+;['DevDashboard', 'DevErrors', 'DevLogs', 'DevTests', 'DevDatabase', 'DevApi', 'DevPwa', 'DevSync', 'DevAdminAccounts', 'DevMaintenance', 'DevUpdates', 'DevAudit'].forEach((n) => { D[n] = lz(() => import('./features/developer'), n) })
 
 const rp = (cfg) => <ResourcePage cfg={cfg} />
 const StudentsPage = () => (
@@ -98,7 +98,7 @@ export default function App() {
         <Route element={<RequireRole roles={['DEVELOPER']} />}><Route element={<Shell />}>
           <Route path="/developer" element={<D.DevDashboard />} /><Route path="/developer/errors" element={<D.DevErrors />} /><Route path="/developer/logs" element={<D.DevLogs />} /><Route path="/developer/tests" element={<D.DevTests />} />
           <Route path="/developer/database" element={<D.DevDatabase />} /><Route path="/developer/api" element={<D.DevApi />} /><Route path="/developer/pwa" element={<D.DevPwa />} /><Route path="/developer/sync" element={<D.DevSync />} />
-          <Route path="/developer/maintenance" element={<D.DevMaintenance />} /><Route path="/developer/updates" element={<D.DevUpdates />} /><Route path="/developer/audit" element={<D.DevAudit />} />
+          <Route path="/developer/admin-accounts" element={<D.DevAdminAccounts />} /><Route path="/developer/maintenance" element={<D.DevMaintenance />} /><Route path="/developer/updates" element={<D.DevUpdates />} /><Route path="/developer/audit" element={<D.DevAudit />} />
         </Route></Route>
         <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />

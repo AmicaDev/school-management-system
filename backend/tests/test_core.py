@@ -1,11 +1,14 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.academics.models import (AcademicYear, ExamType, GradeBand, SchoolClass, Stream, Subject, TeachingAssignment, Term)
 from apps.attendance.models import AttendanceRecord
+from apps.audit.models import AuditLog
 from apps.people.models import Student, TeacherProfile
 from apps.results.models import Assessment
 from apps.results.services import grade_for, term_summary
@@ -86,6 +89,109 @@ class AuthTests(Base):
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(r.data["address"], "Kampala, Uganda")
         self.assertIn("photo", r.data)
+
+
+class DeveloperAdminAccountTests(Base):
+    endpoint = "/api/v1/developer/admin-accounts/"
+
+    def setUp(self):
+        super().setUp()
+        self.production_database_guard = patch(
+            "apps.users.views.DeveloperAdminAccountViewSet._assert_render_production_database"
+        )
+        self.production_database_guard.start()
+        self.addCleanup(self.production_database_guard.stop)
+
+    def login_developer(self):
+        self.client.force_authenticate(user=self.dev)
+
+    def create_admin(self, username="new-school-admin"):
+        return self.client.post(self.endpoint, {
+            "username": username, "email": f"{username}@example.test", "password": PW,
+        }, format="json")
+
+    def test_only_active_developer_can_manage_administrators(self):
+        self.client.force_authenticate(user=self.admin)
+        self.assertEqual(self.client.get(self.endpoint).status_code, 403)
+        self.client.force_authenticate(user=self.p1)
+        self.assertEqual(self.client.post(self.endpoint, {}, format="json").status_code, 403)
+        self.dev.is_active = False
+        self.dev.save(update_fields=["is_active"])
+        self.client.force_authenticate(user=self.dev)
+        self.assertEqual(self.client.get(self.endpoint).status_code, 403)
+
+    def test_rejects_local_database_even_for_authenticated_developer(self):
+        self.login_developer()
+        self.production_database_guard.stop()
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("production Render service", str(response.data))
+
+    def test_developer_can_create_list_deactivate_and_recover_admin(self):
+        self.login_developer()
+        created = self.create_admin()
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertNotIn("password", created.data)
+        admin = User.objects.get(username="new-school-admin")
+        self.assertEqual(admin.role, User.Role.ADMIN)
+        self.assertTrue(admin.is_active)
+        self.assertFalse(admin.is_staff)
+        self.assertFalse(admin.is_superuser)
+        self.assertTrue(admin.check_password(PW))
+
+        admin.first_name = "Existing"
+        admin.save(update_fields=["first_name"])
+        listed = self.client.get(self.endpoint)
+        self.assertEqual(listed.status_code, 200)
+        self.assertTrue(any(row["id"] == admin.id for row in listed.data["results"]))
+
+        deactivated = self.client.post(f"{self.endpoint}{admin.id}/deactivate/", {}, format="json")
+        self.assertEqual(deactivated.status_code, 200, deactivated.content)
+        admin.refresh_from_db()
+        self.assertFalse(admin.is_active)
+        self.assertIsNotNone(admin.admin_deactivated_at)
+        activated = self.client.post(f"{self.endpoint}{admin.id}/recover/", {}, format="json")
+        self.assertEqual(activated.status_code, 200, activated.content)
+        admin.refresh_from_db()
+        self.assertTrue(admin.is_active)
+        self.assertIsNone(admin.admin_deactivated_at)
+        self.assertEqual(admin.first_name, "Existing")
+        self.assertTrue(admin.check_password(PW))
+        self.assertEqual(
+            AuditLog.objects.filter(module="developer", action__in=[
+                "LIST_ADMIN_ACCOUNTS", "CREATE_ADMIN_ACCOUNT", "DEACTIVATE_ADMIN_ACCOUNT", "RECOVER_ADMIN_ACCOUNT",
+            ]).count(),
+            4,
+        )
+
+    def test_admin_password_is_validated_and_last_active_admin_is_protected(self):
+        self.login_developer()
+        invalid = self.client.post(self.endpoint, {
+            "username": "new-school-admin", "email": "admin@example.test", "password": "short",
+        }, format="json")
+        self.assertEqual(invalid.status_code, 400)
+        self.assertFalse(User.objects.filter(username="new-school-admin").exists())
+        response = self.client.post(f"{self.endpoint}{self.admin.id}/deactivate/", {}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_active)
+
+    def test_recovery_refuses_expired_or_deleted_accounts(self):
+        self.login_developer()
+        expired = mk("expired-admin", "ADMIN")
+        expired.is_active = False
+        expired.admin_deactivated_at = timezone.now() - timedelta(days=31)
+        expired.save(update_fields=["is_active", "admin_deactivated_at"])
+        response = self.client.post(f"{self.endpoint}{expired.id}/recover/", {}, format="json")
+        self.assertEqual(response.status_code, 400)
+        expired.refresh_from_db()
+        self.assertFalse(expired.is_active)
+
+        deleted = mk("deleted-admin", "ADMIN")
+        deleted_id = deleted.id
+        deleted.delete()
+        response = self.client.post(f"{self.endpoint}{deleted_id}/recover/", {}, format="json")
+        self.assertEqual(response.status_code, 404)
 
 
 class PermissionTests(Base):

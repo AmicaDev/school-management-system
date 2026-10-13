@@ -27,6 +27,7 @@ class User(AbstractUser):
     )
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.PARENT, db_index=True)
     is_archived = models.BooleanField(default=False, db_index=True)
+    admin_deactivated_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

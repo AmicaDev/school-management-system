@@ -116,6 +116,83 @@ export function DevDatabase() {
     <section className="panel"><h2>Latest applied migration per app</h2><Table columns={[{ key: 'app', label: 'App' }, { key: 'name', label: 'Migration' }]} rows={Object.entries(m?.latest_applied || {}).map(([app, name]) => ({ id: app, app, name }))} />{!!m?.pending.length && <Alert kind="warning">Pending: {m.pending.join(', ')}</Alert>}</section></div>
 }
 
+export function DevAdminAccounts() {
+  const [refresh, setRefresh] = useState(0)
+  const accounts = useFetch('/developer/admin-accounts/', { page_size: 200, _: refresh })
+  const [form, setForm] = useState({ username: '', email: '', password: '' })
+  const [notice, setNotice] = useState({ kind: 'info', text: '' })
+  const [busy, setBusy] = useState(false)
+  const now = Date.now()
+  const eligible = (account) => account.admin_deactivated_at &&
+    now - new Date(account.admin_deactivated_at).getTime() <= 30 * 24 * 60 * 60 * 1000 &&
+    new Date(account.admin_deactivated_at).getTime() <= now
+
+  const create = async (event) => {
+    event.preventDefault()
+    setBusy(true)
+    setNotice({ kind: 'info', text: '' })
+    try {
+      await api.post('/developer/admin-accounts/', form)
+      setForm({ username: '', email: '', password: '' })
+      setNotice({ kind: 'success', text: 'Administrator account created.' })
+      setRefresh((value) => value + 1)
+    } catch (error) {
+      setNotice({ kind: 'error', text: errorMessage(error) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const setActive = async (account, action) => {
+    const verb = action === 'deactivate' ? 'Deactivate' : 'Recover'
+    if (!window.confirm(`${verb} administrator "${account.username}"?`)) return
+    setBusy(true)
+    setNotice({ kind: 'info', text: '' })
+    try {
+      await api.post(`/developer/admin-accounts/${account.id}/${action}/`)
+      setNotice({ kind: 'success', text: `Administrator "${account.username}" ${action === 'deactivate' ? 'deactivated' : 'recovered'}.` })
+      setRefresh((value) => value + 1)
+    } catch (error) {
+      setNotice({ kind: 'error', text: errorMessage(error) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const rows = items(accounts.data).map((account) => ({
+    ...account,
+    status: account.is_active ? 'Active' : 'Inactive',
+    deactivated: account.admin_deactivated_at ? fmtDateTime(account.admin_deactivated_at) : '—',
+    action: account.is_active
+      ? <button type="button" className="btn sm danger" disabled={busy} onClick={() => setActive(account, 'deactivate')}>Deactivate</button>
+      : eligible(account)
+        ? <button type="button" className="btn sm primary" disabled={busy} onClick={() => setActive(account, 'recover')}>Recover</button>
+        : <span className="muted">Recovery expired</span>,
+  }))
+
+  return <div className="stack">
+    <section className="panel">
+      <div className="panel-head"><h2>Administrator accounts</h2><button className="btn sm" onClick={accounts.reload} disabled={accounts.loading}>Refresh</button></div>
+      <p className="muted">Create and manage school administrator accounts. Inactive accounts can be recovered for 30 days after deactivation. Deleted accounts cannot be recovered here.</p>
+      <Alert kind={notice.kind}>{notice.text}</Alert>
+      {accounts.loading ? <Skeleton rows={3} /> : accounts.error ? <ErrorState message={accounts.error} onRetry={accounts.reload} /> :
+        rows.length ? <Table columns={[
+          { key: 'username', label: 'Username' }, { key: 'email', label: 'Email' }, { key: 'status', label: 'Status' },
+          { key: 'deactivated', label: 'Deactivated' }, { key: 'action', label: '' },
+        ]} rows={rows} /> : <Empty title="No administrator accounts" />}
+    </section>
+    <form className="panel" onSubmit={create}>
+      <h2>Create administrator</h2>
+      <div className="grid cols-2">
+        <div className="field"><label htmlFor="dev-admin-username">Username</label><input id="dev-admin-username" className="input" autoComplete="off" required maxLength={150} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} /></div>
+        <div className="field"><label htmlFor="dev-admin-email">Email</label><input id="dev-admin-email" type="email" className="input" autoComplete="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></div>
+      </div>
+      <div className="field"><label htmlFor="dev-admin-password">Temporary password</label><input id="dev-admin-password" type="password" className="input" autoComplete="new-password" required value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /><small className="muted">The server validates and hashes the password. It is never shown again.</small></div>
+      <button className="btn primary" disabled={busy}>{busy ? 'Saving…' : 'Create administrator'}</button>
+    </form>
+  </div>
+}
+
 export function DevApi() {
   const [pings, setPings] = useState([])
   const [busy, setBusy] = useState(false)

@@ -4,6 +4,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import User
+from .passwords import check_password_strength
 
 
 class LoginSerializer(TokenObtainPairSerializer):
@@ -91,6 +92,35 @@ class ManagedUserSerializer(serializers.ModelSerializer):
             instance.set_password(pwd)
         instance.save()
         return instance
+
+
+class DeveloperAdminAccountSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(allow_blank=False)
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+    full_name = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "email", "first_name", "last_name", "full_name", "is_active",
+                  "admin_deactivated_at", "created_at", "password"]
+        read_only_fields = ["id", "full_name", "is_active", "admin_deactivated_at", "created_at"]
+
+    def validate_username(self, value):
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return value
+
+    def validate(self, attrs):
+        account = User(username=attrs["username"], email=attrs["email"])
+        check_password_strength(attrs["password"], user=account)
+        return attrs
+
+    def create(self, validated_data):
+        password = validated_data.pop("password")
+        user = User(role=User.Role.ADMIN, **validated_data)
+        user.set_password(password)
+        user.save()
+        return user
 
 
 class ChangePasswordSerializer(serializers.Serializer):

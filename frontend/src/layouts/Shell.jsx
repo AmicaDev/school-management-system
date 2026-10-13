@@ -27,7 +27,7 @@ export const NAVS = {
   DEVELOPER: [
     ['Dashboard', '/developer', '▦', true], ['Errors', '/developer/errors', '🐞'], ['Logs', '/developer/logs', '📜'], ['Tests', '/developer/tests', '🧪'],
     ['Database', '/developer/database', '🗄'], ['API', '/developer/api', '🔌'], ['PWA', '/developer/pwa', '📲'], ['Sync', '/developer/sync', '🔄'],
-    ['Maintenance', '/developer/maintenance', '🛠'], ['Updates', '/developer/updates', '⬆'], ['Audit', '/developer/audit', '🛡'],
+    ['Admin accounts', '/developer/admin-accounts', '🔑'], ['Maintenance', '/developer/maintenance', '🛠'], ['Updates', '/developer/updates', '⬆'], ['Audit', '/developer/audit', '🛡'],
   ],
 }
 

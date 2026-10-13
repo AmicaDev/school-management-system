@@ -1,10 +1,13 @@
 from django.urls import include, path
 from rest_framework.routers import SimpleRouter
 
+from apps.users.views import DeveloperAdminAccountViewSet
+
 from . import views
 
 router = SimpleRouter()
 router.register("errors", views.ErrorViewSet, basename="dev-error")
+router.register("admin-accounts", DeveloperAdminAccountViewSet, basename="dev-admin-account")
 urlpatterns = [
     path("status/", views.status),
     path("health/", views.health),
