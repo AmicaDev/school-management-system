@@ -40,7 +40,7 @@ add a persistent disk or move uploads to object storage for production) and free
 `DATABASE_URL` at Neon/Supabase (`DATABASE_SSL_REQUIRE=True`).
 
 ## 3. Deploy the frontend on Vercel
-1. Vercel → **Add New Project** → import the repository → set **Root Directory** to `frontend` (framework is detected as Vite; `vercel.json` supplies the SPA rewrite, cache and security headers).
+1. Vercel → **Add New Project** → import the repository → set **Root Directory** to `frontend` (recommended; `frontend/vercel.json` supplies the Vite build, API/media proxy, SPA fallback, cache and security headers). A root-level `vercel.json` is also provided for Vercel projects whose Root Directory is the repository root.
 2. Do not set `VITE_API_BASE_URL` in Vercel. Production builds use same-origin `/api/v1` requests, which Vercel proxies to Render; this avoids client-device DNS and cross-origin CORS dependencies. Local development can still set `VITE_API_BASE_URL` if needed.
 3. Deploy, then copy the Vercel URL into the Render variables `CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS` and `FRONTEND_URL` (no trailing slash) and redeploy the API. These settings remain useful for other direct API clients and Django admin.
 4. Open the site over HTTPS; the browser offers **Install app** (PWA). The service worker is only active in production builds.
