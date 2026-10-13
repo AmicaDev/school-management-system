@@ -1,5 +1,6 @@
 import io
 import zipfile
+from unittest.mock import patch
 
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -116,13 +117,14 @@ class BootstrapTests(Base):
         from django.core.management.base import CommandError
         from django.test import override_settings
 
-        with override_settings(
-            DEBUG=False,
-            ENVIRONMENT="production",
-            DATABASES={"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}},
-        ):
-            with self.assertRaisesMessage(CommandError, "not PostgreSQL"):
-                call_command("recover_production_admin", username="admin", confirm_production=True)
+        with patch.dict("os.environ", {"RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com"}):
+            with override_settings(
+                DEBUG=False,
+                ENVIRONMENT="production",
+                DATABASES={"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}},
+            ):
+                with self.assertRaisesMessage(CommandError, "not PostgreSQL"):
+                    call_command("recover_production_admin", username="admin", confirm_production=True)
 
     def test_bootstrap_creates_missing_accounts_only(self):
         import os
