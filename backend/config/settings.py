@@ -29,6 +29,10 @@ if not SECRET_KEY:
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):  # set automatically by Render
     ALLOWED_HOSTS.append(os.environ["RENDER_EXTERNAL_HOSTNAME"])
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+_frontend_host = urlparse(FRONTEND_URL).hostname
+if _frontend_host and _frontend_host not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_frontend_host)
 
 INSTALLED_APPS = [
     "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
@@ -155,7 +159,6 @@ ALLOW_WEB_MIGRATIONS = os.environ.get("ALLOW_WEB_MIGRATIONS", "False").lower() =
 
 EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@school.local")
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "True").lower() == "true"

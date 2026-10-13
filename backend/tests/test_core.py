@@ -1,7 +1,9 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
+from urllib.parse import urlparse
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework.test import APITestCase
@@ -50,6 +52,20 @@ class Base(APITestCase):
 
 
 class AuthTests(Base):
+    def test_frontend_host_is_allowed_for_proxied_login(self):
+        frontend_host = urlparse(settings.FRONTEND_URL).hostname
+        self.assertIsNotNone(frontend_host)
+        self.assertIn(frontend_host, settings.ALLOWED_HOSTS)
+
+        response = self.client.post(
+            "/api/v1/auth/login/",
+            {"username": "invalid-diagnostic", "password": "invalid-diagnostic"},
+            format="json",
+            HTTP_HOST=frontend_host,
+            secure=True,
+        )
+        self.assertEqual(response.status_code, 401, response.content)
+
     def test_login_returns_jwt_and_role(self):
         r = self.login("adm")
         self.assertEqual(r.data["user"]["role"], "ADMIN")
