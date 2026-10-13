@@ -28,7 +28,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = useCallback(async (username, password) => {
-    const { data } = await api.post('/auth/login/', { username, password })
+    const { data } = await api.post('/auth/login/', { username, password }, { timeout: 90000 })
     tokens.set({ access: data.access, refresh: data.refresh })
     setUser(data.user)
     return data.user

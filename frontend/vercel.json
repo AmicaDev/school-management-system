@@ -11,6 +11,10 @@
     "destination": "https://school-api-67oy.onrender.com/api/v1/:path*"
   },
   {
+    "source": "/media/:path*",
+    "destination": "https://school-api-67oy.onrender.com/media/:path*"
+  },
+  {
     "source": "/(.*)",
     "destination": "/index.html"
   }

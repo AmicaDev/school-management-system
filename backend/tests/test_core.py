@@ -56,6 +56,10 @@ class AuthTests(Base):
         r = self.client.post("/api/v1/auth/login/", {"username": "adm", "password": "x"}, format="json")
         self.assertEqual(r.status_code, 401)
 
+    def test_admin_django_admin_url_is_registered(self):
+        response = self.client.get("/django-admin/login/")
+        self.assertEqual(response.status_code, 200)
+
     def test_parent_logs_in_with_student_index_no(self):
         r = self.client.post("/api/v1/auth/login/", {"username": "S1", "password": PW}, format="json")
         self.assertEqual(r.status_code, 200)
@@ -103,6 +107,27 @@ class PermissionTests(Base):
         self.login("adm")
         r = self.client.post("/api/v1/auth/users/", {"username": "x", "role": "DEVELOPER", "password": PW}, format="json")
         self.assertEqual(r.status_code, 400)
+
+    def test_admin_cannot_deactivate_last_active_admin(self):
+        self.login("adm")
+        r = self.client.patch(f"/api/v1/auth/users/{self.admin.id}/", {"is_active": False}, format="json")
+        self.assertEqual(r.status_code, 400, r.content)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_active)
+        r = self.client.delete(f"/api/v1/auth/users/{self.admin.id}/")
+        self.assertEqual(r.status_code, 400, r.content)
+        r = self.client.patch(f"/api/v1/auth/users/{self.admin.id}/", {"role": "PARENT"}, format="json")
+        self.assertEqual(r.status_code, 400, r.content)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_active)
+
+    def test_admin_can_deactivate_one_of_multiple_active_admins(self):
+        other_admin = mk("adm2", "ADMIN")
+        self.login("adm")
+        r = self.client.patch(f"/api/v1/auth/users/{self.admin.id}/", {"is_active": False}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        other_admin.refresh_from_db()
+        self.assertTrue(other_admin.is_active)
 
     def test_teacher_cannot_write_config(self):
         self.login("t1")

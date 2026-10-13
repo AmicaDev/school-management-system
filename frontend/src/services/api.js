@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+const BASE = import.meta.env.PROD ? '/api/v1' : (import.meta.env.VITE_API_BASE_URL || '/api/v1')
 const KEY = 'sms.tokens'
 
 export const tokens = {
@@ -9,7 +9,7 @@ export const tokens = {
   clear: () => localStorage.removeItem(KEY),
 }
 
-export const api = axios.create({ baseURL: BASE, timeout: 20000 })
+export const api = axios.create({ baseURL: BASE, timeout: 60000 })
 
 api.interceptors.request.use((cfg) => {
   const t = tokens.get()
@@ -47,7 +47,10 @@ api.interceptors.response.use(
 export const items = (data) => (Array.isArray(data) ? data : data?.results || [])
 
 export function errorMessage(e, fallback = 'Something went wrong. Please try again.') {
-  if (!e?.response) return 'Cannot reach the server. Check your connection.'
+  if (!e?.response) {
+    if (e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT') return 'The server took too long to respond. It may be starting up; please try again.'
+    return 'Cannot reach the server. Check your connection and try again.'
+  }
   const d = e.response.data
   if (typeof d === 'string') return /<!doctype html|<html[\s>]/i.test(d) ? (e.response.status === 404 ? 'The requested data could not be found.' : `The server returned an unexpected page (HTTP ${e.response.status}).`) : d.slice(0, 200)
   if (d?.detail) return String(d.detail)

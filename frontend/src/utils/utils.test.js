@@ -10,6 +10,9 @@ describe('api helpers', () => {
   it('gives a friendly message when offline', () => {
     expect(errorMessage({})).toMatch(/Cannot reach the server/)
   })
+  it('explains a request timeout without hiding the failure', () => {
+    expect(errorMessage({ code: 'ECONNABORTED' })).toMatch(/starting up/)
+  })
   it('reads DRF detail and field errors', () => {
     expect(errorMessage({ response: { status: 403, data: { detail: 'Nope' } } })).toBe('Nope')
     expect(fieldErrors({ response: { status: 400, data: { name: ['Required.'] } } })).toEqual({ name: 'Required.' })

@@ -2,10 +2,12 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
+from django.db import transaction
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -130,7 +132,30 @@ class UserViewSet(AuditMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         return User.objects.exclude(role=User.Role.DEVELOPER)
 
+    @staticmethod
+    def _lock_active_admins():
+        return list(
+            User.objects.select_for_update().filter(role=User.Role.ADMIN, is_active=True)
+            .values_list("pk", flat=True)
+        )
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        role = serializer.validated_data.get("role", instance.role)
+        active = serializer.validated_data.get("is_active", instance.is_active)
+        if instance.role == User.Role.ADMIN and instance.is_active and (role != User.Role.ADMIN or not active):
+            admin_ids = self._lock_active_admins()
+            if not any(admin_id != instance.pk for admin_id in admin_ids):
+                raise ValidationError({"detail": "At least one active administrator account must remain."})
+        serializer.save()
+
+    @transaction.atomic
     def perform_destroy(self, instance):  # accounts are deactivated, never deleted
+        if instance.role == User.Role.ADMIN and instance.is_active:
+            admin_ids = self._lock_active_admins()
+            if not any(admin_id != instance.pk for admin_id in admin_ids):
+                raise ValidationError({"detail": "At least one active administrator account must remain."})
         instance.is_active = False
         instance.save(update_fields=["is_active"])
         audit(self.request, "DEACTIVATE", "users", instance.username, "SUCCESS")

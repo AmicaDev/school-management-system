@@ -111,6 +111,19 @@ class MaintenanceTests(Base):
 
 
 class BootstrapTests(Base):
+    def test_production_admin_recovery_rejects_non_production_database(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from django.test import override_settings
+
+        with override_settings(
+            DEBUG=False,
+            ENVIRONMENT="production",
+            DATABASES={"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}},
+        ):
+            with self.assertRaisesMessage(CommandError, "not PostgreSQL"):
+                call_command("recover_production_admin", username="admin", confirm_production=True)
+
     def test_bootstrap_creates_missing_accounts_only(self):
         import os
         from unittest import mock
