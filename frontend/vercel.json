@@ -4,21 +4,20 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  
-"rewrites": [
-  {
-    "source": "/api/v1/:path*",
-    "destination": "https://school-api-67oy.onrender.com/api/v1/:path*"
-  },
-  {
-    "source": "/media/:path*",
-    "destination": "https://school-api-67oy.onrender.com/media/:path*"
-  },
-  {
-    "source": "/(.*)",
-    "destination": "/index.html"
-  }
-],
+  "routes": [
+    {
+      "src": "^/api/v1/(.*)$",
+      "dest": "https://school-api-67oy.onrender.com/api/v1/$1"
+    },
+    {
+      "src": "^/media/(.*)$",
+      "dest": "https://school-api-67oy.onrender.com/media/$1"
+    },
+    {
+      "src": "^/(.*)$",
+      "dest": "/index.html"
+    }
+  ],
 
   "headers": [
     { "source": "/sw.js", "headers": [

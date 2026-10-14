@@ -4,18 +4,18 @@
   "installCommand": "npm install --prefix frontend",
   "buildCommand": "npm run build --prefix frontend",
   "outputDirectory": "frontend/dist",
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/v1/:path*",
-      "destination": "https://school-api-67oy.onrender.com/api/v1/:path*"
+      "src": "^/api/v1/(.*)$",
+      "dest": "https://school-api-67oy.onrender.com/api/v1/$1"
     },
     {
-      "source": "/media/:path*",
-      "destination": "https://school-api-67oy.onrender.com/media/:path*"
+      "src": "^/media/(.*)$",
+      "dest": "https://school-api-67oy.onrender.com/media/$1"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "^/(.*)$",
+      "dest": "/index.html"
     }
   ],
   "headers": [
