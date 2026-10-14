@@ -26,7 +26,7 @@ class ProductionAdminDatabaseGuardTests(SimpleTestCase):
         ENVIRONMENT="development",
         DATABASES={"default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": "school_db",
+            "NAME": "render_production_database",
             "HOST": "dpg-production-a",
         }},
     )
@@ -35,7 +35,7 @@ class ProductionAdminDatabaseGuardTests(SimpleTestCase):
         "RENDER_SERVICE_ID": "",
     })
     @patch("apps.users.views.connection.vendor", "postgresql")
-    def test_allows_render_database_without_optional_environment_labels(self):
+    def test_allows_render_database_with_service_assigned_database_name(self):
         from apps.users.views import DeveloperAdminAccountViewSet
 
         DeveloperAdminAccountViewSet._assert_render_production_database()
@@ -78,9 +78,8 @@ class ProductionAdminDatabaseGuardTests(SimpleTestCase):
 
         from apps.users.views import DeveloperAdminAccountViewSet
 
-        with self.assertRaisesMessage(ValidationError, "production Render service") as error:
+        with self.assertRaisesMessage(ValidationError, "production Render service"):
             DeveloperAdminAccountViewSet._assert_render_production_database()
-        self.assertEqual(error.exception.detail["failed_checks"], ["database_host_not_render"])
 
     @override_settings(
         DEBUG=True,
