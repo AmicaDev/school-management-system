@@ -198,14 +198,22 @@ class DeveloperAdminAccountViewSet(mixins.ListModelMixin, mixins.CreateModelMixi
             database_host.endswith(".render.com")
             or re.fullmatch(r"dpg-[a-z0-9-]+", database_host) is not None
         )
-        if (
-            settings.DEBUG
-            or not os.environ.get("RENDER_EXTERNAL_HOSTNAME")
-            or connection.vendor != "postgresql"
-            or database.get("NAME") != "school_db"
-            or not is_render_database_host
-        ):
-            raise ValidationError({"detail": "Administrator management is only available on the production Render service."})
+        failed_checks = []
+        if settings.DEBUG:
+            failed_checks.append("debug_enabled")
+        if not os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
+            failed_checks.append("render_service_hostname_missing")
+        if connection.vendor != "postgresql":
+            failed_checks.append("database_not_postgresql")
+        if database.get("NAME") != "school_db":
+            failed_checks.append("unexpected_database_name")
+        if not is_render_database_host:
+            failed_checks.append("database_host_not_render")
+        if failed_checks:
+            raise ValidationError({
+                "detail": "Administrator management is only available on the production Render service.",
+                "failed_checks": failed_checks,
+            })
 
     def get_queryset(self):
         self._assert_render_production_database()

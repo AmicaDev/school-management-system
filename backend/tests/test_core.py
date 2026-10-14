@@ -78,8 +78,9 @@ class ProductionAdminDatabaseGuardTests(SimpleTestCase):
 
         from apps.users.views import DeveloperAdminAccountViewSet
 
-        with self.assertRaisesMessage(ValidationError, "production Render service"):
+        with self.assertRaisesMessage(ValidationError, "production Render service") as error:
             DeveloperAdminAccountViewSet._assert_render_production_database()
+        self.assertEqual(error.exception.detail["failed_checks"], ["database_host_not_render"])
 
     @override_settings(
         DEBUG=True,
