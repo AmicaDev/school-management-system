@@ -194,10 +194,10 @@ class DeveloperAdminAccountViewSet(mixins.ListModelMixin, mixins.CreateModelMixi
         database = settings.DATABASES["default"]
         if (
             settings.DEBUG
-            or settings.ENVIRONMENT.lower() != "production"
             or not os.environ.get("RENDER_EXTERNAL_HOSTNAME")
             or connection.vendor != "postgresql"
             or database.get("NAME") != "school_db"
+            or not database.get("HOST", "").lower().endswith(".render.com")
         ):
             raise ValidationError({"detail": "Administrator management is only available on the production Render service."})
 

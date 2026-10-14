@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.test import SimpleTestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
@@ -17,6 +18,42 @@ from apps.results.services import grade_for, term_summary
 from apps.users.models import User
 
 PW = "Str0ng-Test-Pass!9"
+
+
+class ProductionAdminDatabaseGuardTests(SimpleTestCase):
+    @override_settings(
+        DEBUG=False,
+        ENVIRONMENT="development",
+        DATABASES={"default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "school_db",
+            "HOST": "dpg-production-a.oregon-postgres.render.com",
+        }},
+    )
+    @patch.dict("os.environ", {"RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com"})
+    @patch("apps.users.views.connection.vendor", "postgresql")
+    def test_allows_render_school_database_without_environment_label(self):
+        from apps.users.views import DeveloperAdminAccountViewSet
+
+        DeveloperAdminAccountViewSet._assert_render_production_database()
+
+    @override_settings(
+        DEBUG=False,
+        DATABASES={"default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "school_db",
+            "HOST": "db.example.com",
+        }},
+    )
+    @patch.dict("os.environ", {"RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com"})
+    @patch("apps.users.views.connection.vendor", "postgresql")
+    def test_rejects_non_render_database(self):
+        from rest_framework.exceptions import ValidationError
+
+        from apps.users.views import DeveloperAdminAccountViewSet
+
+        with self.assertRaisesMessage(ValidationError, "production Render service"):
+            DeveloperAdminAccountViewSet._assert_render_production_database()
 
 
 def mk(username, role, **kw):
