@@ -32,10 +32,10 @@ class ProductionAdminDatabaseGuardTests(SimpleTestCase):
     )
     @patch.dict("os.environ", {
         "RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com",
-        "RENDER_SERVICE_ID": "srv-production",
+        "RENDER_SERVICE_ID": "",
     })
     @patch("apps.users.views.connection.vendor", "postgresql")
-    def test_allows_render_internal_school_database(self):
+    def test_allows_render_internal_school_database_without_service_id(self):
         from apps.users.views import DeveloperAdminAccountViewSet
 
         DeveloperAdminAccountViewSet._assert_render_production_database()
@@ -51,7 +51,7 @@ class ProductionAdminDatabaseGuardTests(SimpleTestCase):
     )
     @patch.dict("os.environ", {
         "RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com",
-        "RENDER_SERVICE_ID": "srv-production",
+        "RENDER_SERVICE_ID": "",
     })
     @patch("apps.users.views.connection.vendor", "postgresql")
     def test_allows_render_external_school_database(self):
@@ -70,7 +70,7 @@ class ProductionAdminDatabaseGuardTests(SimpleTestCase):
     )
     @patch.dict("os.environ", {
         "RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com",
-        "RENDER_SERVICE_ID": "srv-production",
+        "RENDER_SERVICE_ID": "",
     })
     @patch("apps.users.views.connection.vendor", "postgresql")
     def test_rejects_non_render_database(self):
@@ -92,7 +92,7 @@ class ProductionAdminDatabaseGuardTests(SimpleTestCase):
     )
     @patch.dict("os.environ", {
         "RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com",
-        "RENDER_SERVICE_ID": "srv-production",
+        "RENDER_SERVICE_ID": "",
     })
     @patch("apps.users.views.connection.vendor", "postgresql")
     def test_rejects_render_database_outside_production_environment(self):
