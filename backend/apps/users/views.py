@@ -4,6 +4,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.db import connection
 import os
+import re
 from datetime import timedelta
 
 from django.db import transaction
@@ -192,12 +193,19 @@ class DeveloperAdminAccountViewSet(mixins.ListModelMixin, mixins.CreateModelMixi
     @staticmethod
     def _assert_render_production_database():
         database = settings.DATABASES["default"]
+        database_host = database.get("HOST", "").lower()
+        is_render_database_host = (
+            database_host.endswith(".render.com")
+            or re.fullmatch(r"dpg-[a-z0-9-]+", database_host) is not None
+        )
         if (
             settings.DEBUG
+            or settings.ENVIRONMENT.lower() != "production"
+            or not os.environ.get("RENDER_SERVICE_ID")
             or not os.environ.get("RENDER_EXTERNAL_HOSTNAME")
             or connection.vendor != "postgresql"
             or database.get("NAME") != "school_db"
-            or not database.get("HOST", "").lower().endswith(".render.com")
+            or not is_render_database_host
         ):
             raise ValidationError({"detail": "Administrator management is only available on the production Render service."})
 

@@ -23,31 +23,79 @@ PW = "Str0ng-Test-Pass!9"
 class ProductionAdminDatabaseGuardTests(SimpleTestCase):
     @override_settings(
         DEBUG=False,
-        ENVIRONMENT="development",
+        ENVIRONMENT="production",
         DATABASES={"default": {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": "school_db",
-            "HOST": "dpg-production-a.oregon-postgres.render.com",
+            "HOST": "dpg-production-a",
         }},
     )
-    @patch.dict("os.environ", {"RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com"})
+    @patch.dict("os.environ", {
+        "RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com",
+        "RENDER_SERVICE_ID": "srv-production",
+    })
     @patch("apps.users.views.connection.vendor", "postgresql")
-    def test_allows_render_school_database_without_environment_label(self):
+    def test_allows_render_internal_school_database(self):
         from apps.users.views import DeveloperAdminAccountViewSet
 
         DeveloperAdminAccountViewSet._assert_render_production_database()
 
     @override_settings(
         DEBUG=False,
+        ENVIRONMENT="production",
+        DATABASES={"default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "school_db",
+            "HOST": "dpg-production-a.oregon-postgres.render.com",
+        }},
+    )
+    @patch.dict("os.environ", {
+        "RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com",
+        "RENDER_SERVICE_ID": "srv-production",
+    })
+    @patch("apps.users.views.connection.vendor", "postgresql")
+    def test_allows_render_external_school_database(self):
+        from apps.users.views import DeveloperAdminAccountViewSet
+
+        DeveloperAdminAccountViewSet._assert_render_production_database()
+
+    @override_settings(
+        DEBUG=False,
+        ENVIRONMENT="production",
         DATABASES={"default": {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": "school_db",
             "HOST": "db.example.com",
         }},
     )
-    @patch.dict("os.environ", {"RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com"})
+    @patch.dict("os.environ", {
+        "RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com",
+        "RENDER_SERVICE_ID": "srv-production",
+    })
     @patch("apps.users.views.connection.vendor", "postgresql")
     def test_rejects_non_render_database(self):
+        from rest_framework.exceptions import ValidationError
+
+        from apps.users.views import DeveloperAdminAccountViewSet
+
+        with self.assertRaisesMessage(ValidationError, "production Render service"):
+            DeveloperAdminAccountViewSet._assert_render_production_database()
+
+    @override_settings(
+        DEBUG=False,
+        ENVIRONMENT="development",
+        DATABASES={"default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "school_db",
+            "HOST": "dpg-production-a",
+        }},
+    )
+    @patch.dict("os.environ", {
+        "RENDER_EXTERNAL_HOSTNAME": "school-api.onrender.com",
+        "RENDER_SERVICE_ID": "srv-production",
+    })
+    @patch("apps.users.views.connection.vendor", "postgresql")
+    def test_rejects_render_database_outside_production_environment(self):
         from rest_framework.exceptions import ValidationError
 
         from apps.users.views import DeveloperAdminAccountViewSet
