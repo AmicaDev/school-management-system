@@ -12,10 +12,12 @@
     {
       "src": "^/media/(.*)$",
       "dest": "https://school-api-67oy.onrender.com/media/$1"
-    },
+    }
+  ],
+  "rewrites": [
     {
-      "src": "^/(.*)$",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
