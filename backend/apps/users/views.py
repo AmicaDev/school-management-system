@@ -200,7 +200,6 @@ class DeveloperAdminAccountViewSet(mixins.ListModelMixin, mixins.CreateModelMixi
         )
         if (
             settings.DEBUG
-            or settings.ENVIRONMENT.lower() != "production"
             or not os.environ.get("RENDER_EXTERNAL_HOSTNAME")
             or connection.vendor != "postgresql"
             or database.get("NAME") != "school_db"

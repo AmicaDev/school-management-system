@@ -23,7 +23,7 @@ PW = "Str0ng-Test-Pass!9"
 class ProductionAdminDatabaseGuardTests(SimpleTestCase):
     @override_settings(
         DEBUG=False,
-        ENVIRONMENT="production",
+        ENVIRONMENT="development",
         DATABASES={"default": {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": "school_db",
@@ -35,7 +35,7 @@ class ProductionAdminDatabaseGuardTests(SimpleTestCase):
         "RENDER_SERVICE_ID": "",
     })
     @patch("apps.users.views.connection.vendor", "postgresql")
-    def test_allows_render_internal_school_database_without_service_id(self):
+    def test_allows_render_database_without_optional_environment_labels(self):
         from apps.users.views import DeveloperAdminAccountViewSet
 
         DeveloperAdminAccountViewSet._assert_render_production_database()
@@ -82,7 +82,7 @@ class ProductionAdminDatabaseGuardTests(SimpleTestCase):
             DeveloperAdminAccountViewSet._assert_render_production_database()
 
     @override_settings(
-        DEBUG=False,
+        DEBUG=True,
         ENVIRONMENT="development",
         DATABASES={"default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -95,7 +95,7 @@ class ProductionAdminDatabaseGuardTests(SimpleTestCase):
         "RENDER_SERVICE_ID": "",
     })
     @patch("apps.users.views.connection.vendor", "postgresql")
-    def test_rejects_render_database_outside_production_environment(self):
+    def test_rejects_render_database_when_debug_is_enabled(self):
         from rest_framework.exceptions import ValidationError
 
         from apps.users.views import DeveloperAdminAccountViewSet
