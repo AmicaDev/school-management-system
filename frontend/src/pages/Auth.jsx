@@ -39,11 +39,11 @@ export function Login() {
   }
   return (
     <AuthFrame title="Sign in">
-      <p className="muted">Parents can sign in with their child's index number.</p>
+      <p className="muted">Parents can sign in with their child's index number. Teachers can sign in with their teaching subject and subject code.</p>
       <Alert>{err}</Alert>
       <form onSubmit={submit} noValidate>
-        <div className="field"><label htmlFor="u">Username or student index number</label><input id="u" className="input" autoComplete="username" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} /></div>
-        <div className="field"><label htmlFor="p">Password</label><input id="p" type="password" className="input" autoComplete="current-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></div>
+        <div className="field"><label htmlFor="u">Username, student index number, or subject</label><input id="u" className="input" autoComplete="username" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} /></div>
+        <div className="field"><label htmlFor="p">Password or subject code</label><input id="p" type="password" className="input" autoComplete="current-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></div>
         <button className="btn primary lg" style={{ width: '100%' }} disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
       </form>
       <p><Link to="/forgot-password">Forgot password?</Link> · <Link to="/register">Need an account?</Link></p>
@@ -56,7 +56,7 @@ export function Register() {
     <AuthFrame title="Request an account">
       <div className="alert info">Accounts are created by your school administrator so that every user is verified.</div>
       <p><b>Parents:</b> ask the school office for your child's index number and a temporary password.</p>
-      <p><b>Teachers:</b> your administrator will issue your username and password.</p>
+      <p><b>Teachers:</b> sign in using your teaching subject (e.g. Math) and your subject code (e.g. P220), or your assigned account username.</p>
       <Link to="/login" className="btn primary">Back to sign in</Link>
     </AuthFrame>
   )

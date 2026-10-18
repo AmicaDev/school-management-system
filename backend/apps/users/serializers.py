@@ -11,35 +11,104 @@ class LoginSerializer(TokenObtainPairSerializer):
     """Accepts usernames, parent student indexes, and assigned teacher subject codes."""
 
     def validate(self, attrs):
-        ident = attrs.get(self.username_field, "")
-        if ident and not User.objects.filter(username__iexact=ident).exists():
-            from apps.academics.models import TeachingAssignment
-            from apps.people.models import Student
+        import re
+        ident = (attrs.get(self.username_field) or "").strip()
+        pwd = (attrs.get("password") or "").strip()
 
-            student = Student.objects.filter(index_no__iexact=ident, is_archived=False).first()
-            if student:
-                parents = list(student.parents.filter(is_active=True)[:2])
-                if len(parents) == 1:
-                    attrs[self.username_field] = parents[0].username
-            elif attrs.get("password"):
-                teacher_ids = list(
-                    TeachingAssignment.objects.filter(
-                        subject__name__iexact=ident,
-                        teacher_subject_code__iexact=attrs.get("password", ""),
-                        teacher__role=User.Role.TEACHER,
-                        teacher__is_active=True,
-                    ).filter(
-                        Q(teacher__teacher_profile__isnull=True) | Q(teacher__teacher_profile__is_archived=False)
-                    ).values_list("teacher_id", flat=True).distinct()[:2]
-                )
-                if len(teacher_ids) == 1:
-                    self.user = User.objects.get(pk=teacher_ids[0])
+        # 1. Standard authentication if username exists and password matches
+        user = User.objects.filter(username__iexact=ident, is_active=True).first()
+        if user and user.check_password(pwd):
+            self.user = user
+            refresh = self.get_token(self.user)
+            return {
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+                "user": UserSerializer(self.user).data,
+            }
+
+        # 2. Parent sign-in via student index number
+        from apps.people.models import Student
+        student = Student.objects.filter(index_no__iexact=ident, is_archived=False).first()
+        if student:
+            parents = list(student.parents.filter(is_active=True)[:2])
+            if len(parents) == 1:
+                attrs[self.username_field] = parents[0].username
+                data = super().validate(attrs)
+                data["user"] = UserSerializer(self.user).data
+                return data
+
+        # 3. Teacher sign-in via teaching subject and subject code
+        if pwd:
+            from apps.academics.models import TeachingAssignment
+
+            assignments = TeachingAssignment.objects.filter(
+                teacher__role=User.Role.TEACHER,
+                teacher__is_active=True,
+            ).filter(
+                Q(teacher__teacher_profile__isnull=True) | Q(teacher__teacher_profile__is_archived=False)
+            ).filter(
+                Q(teacher_subject_code__iexact=pwd) | Q(subject__code__iexact=pwd)
+            )
+
+            matching_ids = []
+            if assignments.exists():
+                # Direct teacher username match
+                direct = assignments.filter(teacher__username__iexact=ident)
+                if direct.exists():
+                    matching_ids = list(direct.values_list("teacher_id", flat=True).distinct()[:2])
+
+                # Direct subject name or code match
+                if not matching_ids:
+                    by_subject = assignments.filter(
+                        Q(subject__name__iexact=ident) | Q(subject__code__iexact=ident)
+                    )
+                    matching_ids = list(by_subject.values_list("teacher_id", flat=True).distinct()[:2])
+
+                # Class-qualified subject match, e.g. "Math S1", "Maths S.1", "Math Senior 1", "Math P1"
+                if not matching_ids:
+                    class_match = re.search(r'\b(?:s\.?|senior\s*|p\.?|primary\s*)([1-6])\b', ident, re.I)
+                    subj_part = re.sub(r'\b(?:s\.?|senior\s*|p\.?|primary\s*)[1-6]\b', '', ident, flags=re.I).strip(" -_()")
+                    filtered = assignments
+                    if class_match:
+                        c_digit = class_match.group(1)
+                        filtered = filtered.filter(
+                            Q(stream__school_class__name__icontains=f"S{c_digit}") |
+                            Q(stream__school_class__name__icontains=f"P{c_digit}") |
+                            Q(stream__school_class__name__icontains=f"Senior {c_digit}") |
+                            Q(stream__school_class__name__icontains=f"Primary {c_digit}") |
+                            Q(stream__school_class__name__icontains=c_digit)
+                        )
+                    if subj_part:
+                        filtered = filtered.filter(
+                            Q(subject__name__icontains=subj_part) |
+                            Q(subject__code__icontains=subj_part)
+                        )
+                    matching_ids = list(filtered.values_list("teacher_id", flat=True).distinct()[:2])
+
+                # Substring/fuzzy match on subject name (e.g. "Math" matches "Mathematics")
+                if not matching_ids:
+                    fuzzy = assignments.filter(subject__name__icontains=ident)
+                    matching_ids = list(fuzzy.values_list("teacher_id", flat=True).distinct()[:2])
+
+                if not matching_ids:
+                    for part in ident.split():
+                        part = part.strip()
+                        if len(part) >= 3:
+                            fuzzy = assignments.filter(Q(subject__name__icontains=part) | Q(subject__code__icontains=part))
+                            f_ids = list(fuzzy.values_list("teacher_id", flat=True).distinct()[:2])
+                            if len(f_ids) == 1:
+                                matching_ids = f_ids
+                                break
+
+                if len(matching_ids) == 1:
+                    self.user = User.objects.get(pk=matching_ids[0])
                     refresh = self.get_token(self.user)
                     return {
                         "refresh": str(refresh),
                         "access": str(refresh.access_token),
                         "user": UserSerializer(self.user).data,
                     }
+
         data = super().validate(attrs)
         data["user"] = UserSerializer(self.user).data
         return data

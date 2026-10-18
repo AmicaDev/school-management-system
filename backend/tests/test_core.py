@@ -175,6 +175,25 @@ class AuthTests(Base):
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(r.data["user"]["username"], "t1")
 
+    def test_teacher_logs_in_with_subject_name_and_subject_code(self):
+        # Teacher logs in using subject code (Subject.code='math') even if teacher_subject_code is blank
+        TeachingAssignment.objects.filter(teacher=self.t1, subject=self.maths).update(teacher_subject_code="")
+        r = self.client.post("/api/v1/auth/login/", {"username": "Maths", "password": "math"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["user"]["username"], "t1")
+
+    def test_teacher_logs_in_with_subject_variant_and_class(self):
+        # Teacher logs in with variant name 'Math' and class 'P1'
+        r = self.client.post("/api/v1/auth/login/", {"username": "Math P1", "password": "math"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["user"]["username"], "t1")
+
+    def test_teacher_logs_in_with_username_and_subject_code(self):
+        # Teacher logs in using their username 't1' and assigned subject code 'math'
+        r = self.client.post("/api/v1/auth/login/", {"username": "t1", "password": "math"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["user"]["username"], "t1")
+
     def test_teacher_subject_login_requires_matching_assigned_code(self):
         TeachingAssignment.objects.filter(teacher=self.t1, subject=self.maths).update(teacher_subject_code="P221")
         r = self.client.post("/api/v1/auth/login/", {"username": "Maths", "password": "wrong"}, format="json")

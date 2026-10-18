@@ -137,3 +137,5 @@ export function ImportPanel({ kind, title, columns, note }) {
     </section>
   )
 }
+
+export { AdminStudentReportsPage } from './StudentReports'

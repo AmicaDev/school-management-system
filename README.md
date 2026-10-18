@@ -49,6 +49,7 @@ python manage.py migrate
 python manage.py makemigrations --check --dry-run
 python manage.py test tests
 python manage.py create_initial_user --role ADMIN --username school-admin --email admin@example.com
+
 # Optional developer/testing account; enter a unique username and email.
 python manage.py create_initial_user --role DEVELOPER --username AmicaDev --email ojukajames0@gmail.com
 python manage.py runserver
@@ -77,8 +78,8 @@ In PowerShell, copy the root example with `Copy-Item .env.example .env`, set `DA
 `docker compose -f docker-compose.prod.yml up -d --build` (production: Gunicorn, Celery, Postgres, Redis, Nginx on :80).
 
 ## Configuration
-See the root `.env.example` for Docker Compose, `backend/.env.example` for local Django, and `frontend/.env.example` (`VITE_API_BASE_URL`).
-`DATABASE_URL` is supported for hosted PostgreSQL. Without `REDIS_URL`, tasks run inline and the cache is per-process.
+See the root `.env.example` for Docker Compose, `backend/.env.example` for local Django, and `frontend/.env.example` (`VITE_API_BASE_URL`; local development only). Production Vercel builds use the same-origin API and media rewrites.
+`DATABASE_URL` is supported for hosted PostgreSQL. The developer administrator management API is enabled only on the production Render backend connected to its `school_db` PostgreSQL database; it cannot modify local or Codespaces databases. Without `REDIS_URL`, tasks run inline and the cache is per-process.
 
 ## Known limitations
 - Migrations are committed under each model-bearing app's `migrations/` directory; deployments must apply them with `migrate`.
@@ -91,8 +92,8 @@ See the root `.env.example` for Docker Compose, `backend/.env.example` for local
 |---|---|
 | `DJANGO_SECRET_KEY must be set` | Set it in `backend/.env` or use `DJANGO_DEBUG=True` locally. |
 | `relation "users_user" does not exist` | `makemigrations` then `migrate`. |
-| Browser CORS error | Add the frontend origin to `CORS_ALLOWED_ORIGINS` (and `CSRF_TRUSTED_ORIGINS`), no trailing slash. |
-| Login works but pages show "Cannot reach the server" | `VITE_API_BASE_URL` wrong or not set at **build** time on Vercel — redeploy after changing it. |
+| Direct API client has a browser CORS error | Add the frontend origin to `CORS_ALLOWED_ORIGINS` (and `CSRF_TRUSTED_ORIGINS`), no trailing slash. Vercel production should use the committed same-origin rewrites. |
+| Vercel login request times out | Check that Vercel has deployed the `/api/v1/*` rewrite and that the Render API has started; Render Free services can take time to wake. Production builds ignore `VITE_API_BASE_URL` and use the proxy. |
 | 503 "maintenance" | Developer console → Maintenance → disable. |
 | Service worker stuck on old version | Bump `VERSION` in `frontend/public/sw.js`; hard-reload once. |
 | Celery "No worker" | Expected without Redis (tasks run inline). Otherwise start Redis and `celery -A config worker`. |

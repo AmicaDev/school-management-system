@@ -205,14 +205,63 @@ def grid(request):
 def class_summary(request):
     q = request.query_params
     try:
-        stream, term = int(q["stream"]), Term.objects.get(pk=int(q["term"]))
+        term = Term.objects.get(pk=int(q["term"]))
     except (KeyError, ValueError, Term.DoesNotExist):
-        return Response({"detail": "stream and term are required."}, status=400)
-    if not teacher_can_teach(request.user, stream):
-        return Response({"detail": "You are not assigned to this class."}, status=403)
+        return Response({"detail": "term is required."}, status=400)
+
+    stream_id = q.get("stream")
+    school_class_id = q.get("school_class")
+
+    if not stream_id and not school_class_id:
+        return Response({"detail": "stream or school_class is required."}, status=400)
+
+    if stream_id:
+        try:
+            stream_id = int(stream_id)
+        except ValueError:
+            return Response({"detail": "Invalid stream."}, status=400)
+        if not teacher_can_teach(request.user, stream_id):
+            return Response({"detail": "You are not assigned to this class."}, status=403)
+        students = Student.objects.filter(stream_id=stream_id, is_archived=False).select_related("stream__school_class").order_by("last_name")
+    else:
+        try:
+            school_class_id = int(school_class_id)
+        except ValueError:
+            return Response({"detail": "Invalid school_class."}, status=400)
+        if request.user.role != "ADMIN":
+            from apps.academics.models import TeachingAssignment
+            if not TeachingAssignment.objects.filter(teacher=request.user, stream__school_class_id=school_class_id).exists():
+                return Response({"detail": "You are not assigned to this class."}, status=403)
+        students = Student.objects.filter(stream__school_class_id=school_class_id, is_archived=False).select_related("stream__school_class").order_by("last_name")
+
+    detailed = q.get("detailed") in ("1", "true", "True")
+    comments_map = {}
+    if detailed:
+        for c in ReportComment.objects.filter(term=term, student__in=students):
+            comments_map[c.student_id] = {"head_comment": c.head_comment, "teacher_comment": c.teacher_comment}
+
     out = []
-    for s in Student.objects.filter(stream_id=stream, is_archived=False).select_related("stream").order_by("last_name"):
+    for s in students:
         r = term_summary(s, term)
-        out.append({"id": s.id, "index_no": s.index_no, "name": s.full_name, "subjects": len(r["subjects"]),
-                    "average": r["average"], "grade": r["grade"], "position": r["position"]["rank"] if r["position"] else None})
+        entry = {
+            "id": s.id, "index_no": s.index_no, "candidate_no": s.candidate_no or "", "name": s.full_name,
+            "gender": s.gender,
+            "stream_label": str(s.stream) if s.stream else "",
+            "photo": s.photo.url if s.photo else None,
+            "subjects": len(r["subjects"]),
+            "average": r["average"], "grade": r["grade"],
+            "position": r["position"]["rank"] if r["position"] else None,
+        }
+        if detailed:
+            cm = comments_map.get(s.id, {})
+            entry["report"] = {
+                **r,
+                "head_comment": cm.get("head_comment", ""),
+                "teacher_comment": cm.get("teacher_comment", ""),
+                "class_name": str(s.stream.school_class) if s.stream and s.stream.school_class else "",
+                "stream_name": s.stream.name if s.stream else "",
+                "term_name": term.name,
+                "year_name": term.year.name,
+            }
+        out.append(entry)
     return Response(out)

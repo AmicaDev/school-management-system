@@ -40,9 +40,15 @@ class TermSerializer(CleanedModelSerializer):
 
 
 class SchoolClassSerializer(serializers.ModelSerializer):
+    student_count = serializers.SerializerMethodField()
+
     class Meta:
         model = m.SchoolClass
-        fields = "__all__"
+        fields = ["id", "name", "order", "student_count"]
+
+    def get_student_count(self, obj):
+        from apps.people.models import Student
+        return Student.objects.filter(stream__school_class=obj, is_archived=False).count()
 
 
 class StreamSerializer(serializers.ModelSerializer):

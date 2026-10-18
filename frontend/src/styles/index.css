@@ -204,3 +204,50 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 .avatar { display: inline-grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; background: var(--primary-50); color: var(--primary); font-weight: 700; }
 .pre { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: var(--fs-xs); background: var(--surface-2); padding: var(--sp-3); border-radius: var(--r-md); overflow: auto; max-height: 320px; white-space: pre-wrap; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; } }
+
+/* ===== Report Card & Print Styling ===== */
+.report-card-modal-backdrop { position: fixed; inset: 0; background: rgba(10, 20, 35, .7); z-index: 100; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+.report-card-toolbar { position: sticky; top: 0; z-index: 101; background: var(--surface); padding: 12px 20px; border-radius: var(--r-md); box-shadow: var(--shadow-2); display: flex; gap: 12px; align-items: center; margin-bottom: 20px; width: min(860px, 100%); }
+.report-card-print-container { width: min(860px, 100%); display: flex; flex-direction: column; gap: 24px; }
+.report-card-print-page { background: #ffffff !important; color: #111827 !important; border: 2px solid #222; border-radius: 4px; padding: 20px 24px; box-shadow: var(--shadow-2); font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; line-height: 1.35; }
+.rc-header { display: grid; grid-template-columns: 85px 1fr 85px; gap: 12px; align-items: center; border-bottom: 2px solid #222; padding-bottom: 10px; margin-bottom: 10px; }
+.rc-logo { width: 85px; height: 85px; object-fit: contain; }
+.rc-title-area { text-align: center; }
+.rc-school-name { font-size: 18px; font-weight: 800; color: #111827; margin: 0 0 2px; letter-spacing: 0.5px; }
+.rc-school-meta { font-size: 11px; color: #374151; margin: 0 0 2px; }
+.rc-motto { font-size: 11px; font-weight: 700; color: #1d4f91; font-style: italic; margin: 2px 0 0; }
+.rc-photo { width: 85px; height: 95px; object-fit: cover; border: 1.5px solid #374151; border-radius: 3px; display: block; margin-left: auto; }
+.rc-photo-placeholder { width: 85px; height: 95px; border: 1.5px dashed #9ca3af; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #6b7280; text-align: center; margin-left: auto; background: #f9fafb; }
+.rc-card-banner { background: #1d4f91; color: #ffffff; text-align: center; font-weight: 800; font-size: 13px; padding: 4px; letter-spacing: 1px; margin-bottom: 10px; }
+.rc-meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 12px; background: #f3f4f6; border: 1px solid #d1d5db; padding: 8px 12px; margin-bottom: 12px; font-size: 11px; }
+.rc-meta-item { display: flex; flex-direction: column; }
+.rc-meta-item .lbl { font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; }
+.rc-meta-item .val { font-weight: 700; color: #111827; }
+.rc-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10px; }
+.rc-table th, .rc-table td { border: 1px solid #374151; padding: 4px 6px; text-align: center; }
+.rc-table th { background: #e5e7eb; font-weight: 800; color: #111827; text-transform: uppercase; font-size: 9.5px; }
+.rc-table td.sub-name { text-align: left; font-weight: 600; }
+.rc-table tr.total-row { background: #f3f4f6; font-weight: 800; }
+.rc-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; background: #f9fafb; border: 1px solid #e5e7eb; padding: 8px 12px; }
+.rc-summary-item { text-align: center; }
+.rc-summary-item .s-lbl { font-size: 9.5px; color: #4b5563; font-weight: 700; text-transform: uppercase; }
+.rc-summary-item .s-val { font-size: 14px; font-weight: 800; color: #1d4f91; }
+.rc-comments-box { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.rc-comment-row { border: 1px solid #d1d5db; padding: 6px 10px; border-radius: 3px; font-size: 10.5px; }
+.rc-comment-row b { color: #111827; margin-right: 6px; }
+.rc-grading-scale { width: 100%; border-collapse: collapse; font-size: 9.5px; margin-top: 6px; }
+.rc-grading-scale th, .rc-grading-scale td { border: 1px solid #9ca3af; padding: 2px 4px; text-align: center; }
+.rc-grading-scale th { background: #f3f4f6; font-weight: 700; }
+
+@media print {
+  @page { size: A4 portrait; margin: 10mm 12mm; }
+  body { background: #ffffff !important; color: #000000 !important; }
+  .sidebar, .topbar, .overlay, .no-print, button, nav, .btn, .tabs, .sync-bar, .update-bar, form, .report-card-toolbar { display: none !important; }
+  .shell { display: block !important; }
+  .main { margin: 0 !important; padding: 0 !important; }
+  .panel { border: none !important; box-shadow: none !important; padding: 0 !important; background: transparent !important; }
+  .report-card-modal-backdrop { position: static !important; background: transparent !important; padding: 0 !important; display: block !important; }
+  .report-card-print-container { width: 100% !important; margin: 0 !important; }
+  .report-card-print-page { border: 1.5px solid #000 !important; box-shadow: none !important; page-break-after: always !important; break-after: page !important; margin-bottom: 0 !important; }
+  .report-card-print-page:last-child { page-break-after: auto !important; break-after: auto !important; }
+}

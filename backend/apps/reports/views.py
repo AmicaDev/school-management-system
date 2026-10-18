@@ -67,3 +67,40 @@ def job_download(request, job_id):
     if job.status != "DONE" or not job.file:
         return Response({"detail": "The report cards are not ready yet."}, status=409)
     return FileResponse(job.file.open("rb"), as_attachment=True, filename=f"report-cards-{job.id}.zip", content_type="application/zip")
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminOrTeacher])
+def class_report_cards(request, class_id, term_id):
+    """Download ZIP of all report cards for all students in the selected SchoolClass and term."""
+    import io
+    import zipfile
+    from apps.academics.models import SchoolClass, TeachingAssignment, Term
+    from apps.people.models import Student
+
+    school_class = SchoolClass.objects.filter(pk=class_id).first()
+    if not school_class:
+        raise Http404
+    term = Term.objects.select_related("year").filter(pk=term_id).first()
+    if not term:
+        return Response({"detail": "Term not found."}, status=404)
+
+    if request.user.role != "ADMIN":
+        if not TeachingAssignment.objects.filter(teacher=request.user, stream__school_class=school_class).exists():
+            return Response({"detail": "You are not assigned to this class."}, status=403)
+
+    students = Student.objects.filter(
+        stream__school_class=school_class, is_archived=False
+    ).select_related("stream__school_class").order_by("last_name", "first_name")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for s in students:
+            pdf_buf = build_report_card(s, term)
+            filename = f"{s.index_no}_{s.last_name}_{s.first_name}.pdf".replace("/", "-")
+            z.writestr(filename, pdf_buf.getvalue())
+
+    buf.seek(0)
+    audit(request, "REPORT_CLASS_ZIP", "reports", f"{school_class.name} {term}")
+    safe_name = f"{school_class.name}-{term.name}".replace(" ", "_")
+    return FileResponse(buf, as_attachment=True, filename=f"report-cards-{safe_name}.zip", content_type="application/zip")

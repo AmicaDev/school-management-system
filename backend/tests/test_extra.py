@@ -80,6 +80,22 @@ class ReportJobTests(Base):
         self.login("p1")
         self.assertEqual(self.client.post("/api/v1/reports/class-cards/", {"stream": self.stream.id, "term": self.term.id}, format="json").status_code, 403)
 
+    def test_admin_downloads_class_report_cards_zip(self):
+        self.login("adm")
+        r = self.client.get(f"/api/v1/reports/class-report-cards/{self.stream.school_class.id}/{self.term.id}/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r["Content-Type"], "application/zip")
+        z = zipfile.ZipFile(io.BytesIO(b"".join(r.streaming_content)))
+        self.assertEqual(len(z.namelist()), 2)
+
+    def test_classes_list_includes_accurate_student_count(self):
+        self.login("adm")
+        r = self.client.get("/api/v1/academics/classes/")
+        self.assertEqual(r.status_code, 200)
+        cls_data = next((c for c in r.data if c["id"] == self.stream.school_class.id), None)
+        self.assertIsNotNone(cls_data)
+        self.assertEqual(cls_data["student_count"], 2)
+
 
 class MaintenanceTests(Base):
     def tearDown(self):

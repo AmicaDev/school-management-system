@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { RedirectIfAuthed, RequireRole } from './routes/Guards'
 import Shell from './layouts/Shell'
@@ -21,7 +21,7 @@ const ServerError = lz(() => import('./pages/ErrorPages'), 'ServerError')
 const OfflinePage = lz(() => import('./pages/ErrorPages'), 'OfflinePage')
 const Maintenance = lz(() => import('./pages/ErrorPages'), 'Maintenance')
 const A = {}
-;['AdminDashboard', 'ClassesPage', 'SubjectsPage', 'AcademicsPage', 'GradingPage', 'RecycleBinPage', 'SchoolSettings', 'ImportPanel'].forEach((n) => { A[n] = lz(() => import('./features/admin'), n) })
+;['AdminDashboard', 'ClassesPage', 'SubjectsPage', 'AcademicsPage', 'GradingPage', 'RecycleBinPage', 'SchoolSettings', 'ImportPanel', 'AdminStudentReportsPage'].forEach((n) => { A[n] = lz(() => import('./features/admin'), n) })
 const S = {}
 ;['StudentProfile', 'ClassResults', 'NotificationsPage', 'EventsPage', 'Enquiries', 'ParentProfile'].forEach((n) => { S[n] = lz(() => import('./features/Shared'), n) })
 const T = {}
@@ -32,12 +32,29 @@ const D = {}
 ;['DevDashboard', 'DevErrors', 'DevLogs', 'DevTests', 'DevDatabase', 'DevApi', 'DevPwa', 'DevSync', 'DevAdminAccounts', 'DevMaintenance', 'DevUpdates', 'DevAudit'].forEach((n) => { D[n] = lz(() => import('./features/developer'), n) })
 
 const rp = (cfg) => <ResourcePage cfg={cfg} />
-const StudentsPage = () => (
-  <div className="stack">
-    <ResourcePage cfg={{ ...R.students, rowActions: (r) => <Link className="btn sm" to={`/admin/students/${r.id}`}>Profile</Link> }} />
-    <A.ImportPanel kind="students" title="Bulk import students" columns={['first_name', 'last_name', 'gender', 'date_of_birth', 'class', 'stream', 'index_no', 'candidate_no']} note="gender is M or F; date format YYYY-MM-DD. Index numbers are generated if blank; candidate numbers are optional." />
-  </div>
-)
+const StudentsPage = () => {
+  const [tab, setTab] = useState('S1–S6 Classes & Reports')
+  return (
+    <div className="stack">
+      <div className="tabs" style={{ marginBottom: 0 }}>
+        <button type="button" className="tab" aria-selected={tab === 'S1–S6 Classes & Reports'} onClick={() => setTab('S1–S6 Classes & Reports')}>
+          🎓 S1–S6 Classes & Report Cards
+        </button>
+        <button type="button" className="tab" aria-selected={tab === 'All Students & Import'} onClick={() => setTab('All Students & Import')}>
+          📋 All Students Directory & Bulk Import
+        </button>
+      </div>
+      {tab === 'S1–S6 Classes & Reports' ? (
+        <A.AdminStudentReportsPage />
+      ) : (
+        <div className="stack" style={{ marginTop: 16 }}>
+          <ResourcePage cfg={{ ...R.students, rowActions: (r) => <Link className="btn sm" to={`/admin/students/${r.id}`}>Profile</Link> }} />
+          <A.ImportPanel kind="students" title="Bulk import students" columns={['first_name', 'last_name', 'gender', 'date_of_birth', 'class', 'stream', 'index_no', 'candidate_no']} note="gender is M or F; date format YYYY-MM-DD. Index numbers are generated if blank; candidate numbers are optional." />
+        </div>
+      )}
+    </div>
+  )
+}
 const TeachersPage = () => (
   <div className="stack">
     <ResourcePage cfg={R.teachers} />
@@ -77,7 +94,7 @@ export default function App() {
           <Route path="/admin/teachers" element={<TeachersPage />} /><Route path="/admin/parents" element={<ParentsPage />} /><Route path="/admin/staff" element={rp(R.staff)} />
           <Route path="/admin/recycle-bin" element={<A.RecycleBinPage />} />
           <Route path="/admin/classes" element={<A.ClassesPage />} /><Route path="/admin/subjects" element={<A.SubjectsPage />} /><Route path="/admin/academics" element={<A.AcademicsPage />} /><Route path="/admin/grading" element={<A.GradingPage />} />
-          <Route path="/admin/attendance" element={rp(R.attendance)} /><Route path="/admin/results" element={<S.ClassResults downloads={false} />} /><Route path="/admin/reports" element={<S.ClassResults />} />
+          <Route path="/admin/attendance" element={rp(R.attendance)} /><Route path="/admin/results" element={<S.ClassResults downloads={false} />} /><Route path="/admin/reports" element={<A.AdminStudentReportsPage />} /><Route path="/admin/student-reports" element={<A.AdminStudentReportsPage />} />
           <Route path="/admin/timetable" element={rp(R.timetable)} /><Route path="/admin/events" element={rp(R.events)} /><Route path="/admin/notifications" element={<S.NotificationsPage />} />
           <Route path="/admin/enquiries" element={<S.Enquiries />} /><Route path="/admin/analytics" element={<A.AdminDashboard view="analytics" />} />
           <Route path="/admin/settings" element={<A.SchoolSettings />} /><Route path="/admin/users" element={rp(R.users)} /><Route path="/admin/audit" element={rp(R.audit)} />
