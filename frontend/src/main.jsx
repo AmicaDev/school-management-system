@@ -6,6 +6,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { AppProvider } from './contexts/AppContext'
 import { reportClientError } from './services/api'
 import './styles/index.css'
+import badgeImg from './assets/IMG-20261010-WA0012.jpg'
 
 class Boundary extends Component {
   state = { failed: false }
@@ -15,6 +16,31 @@ class Boundary extends Component {
     if (!this.state.failed) return this.props.children
     return <div className="state" style={{ minHeight: '70vh', display: 'grid', placeContent: 'center' }}><h2>Something went wrong</h2><p>The problem has been reported. Your saved work on this device is safe.</p><button className="btn primary" onClick={() => location.assign('/')}>Reload</button></div>
   }
+}
+
+function Splash() {
+  return (
+    <div className="splash" role="status" aria-label="Loading school management system">
+      <div className="splash-inner">
+        <img src={badgeImg} alt="Kiyingi Memorial Secondary School" className="splash-badge" />
+        <p className="splash-slogan">Welcome back to Kiyingi Memoeial SS Managemnt System</p>
+      </div>
+    </div>
+  )
+}
+
+function AppBoot() {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 700)
+    return () => clearTimeout(t)
+  }, [])
+  return (
+    <>
+      {!ready && <Splash />}
+      <div style={{ display: ready ? 'contents' : 'none' }}><App /></div>
+    </>
+  )
 }
 
 function UpdateBanner() {
@@ -43,5 +69,5 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 
 createRoot(document.getElementById('root')).render(
-  <StrictMode><Boundary><BrowserRouter><AuthProvider><AppProvider><UpdateBanner /><App /></AppProvider></AuthProvider></BrowserRouter></Boundary></StrictMode>,
+  <StrictMode><Boundary><BrowserRouter><AuthProvider><AppProvider><UpdateBanner /><AppBoot /></AppProvider></AuthProvider></BrowserRouter></Boundary></StrictMode>,
 )

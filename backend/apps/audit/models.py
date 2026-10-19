@@ -12,6 +12,8 @@ class AuditLog(models.Model):
     result = models.CharField(max_length=10, default="SUCCESS")
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    is_archived = models.BooleanField(default=False, db_index=True)
+    archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     class Meta:
         ordering = ["-created_at"]

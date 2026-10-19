@@ -67,16 +67,18 @@ const recycleConfigs = [
   { key: 'parents', title: 'Parents', cfg: R.parents, endpoint: '/parents/', params: { is_archived: true } },
   { key: 'teachers', title: 'Teachers', cfg: R.teachers, endpoint: '/teachers/', params: { is_archived: true } },
   { key: 'subjects', title: 'Subjects', cfg: R.subjects, endpoint: '/academics/subjects/', params: { is_archived: true } },
+  { key: 'audit', title: 'Recent activity', cfg: R.audit, endpoint: '/audit/', params: {}, recycleBin: true },
 ]
 
 export function RecycleBinPage() {
   const [selected, setSelected] = useState(recycleConfigs[0].key)
   const current = recycleConfigs.find((item) => item.key === selected)
+  const params = current.key === 'audit' ? { ...current.params, trash: '1' } : current.params
   return (
     <div className="stack">
       <p className="muted">Archived records can be restored or permanently deleted. Permanent deletion cannot be undone.</p>
       <Tabs tabs={recycleConfigs.map((item) => item.title)} value={current.title} onChange={(title) => setSelected(recycleConfigs.find((item) => item.title === title).key)} />
-      <ResourcePage cfg={{ ...current.cfg, title: `${current.title} in recycle bin`, endpoint: current.endpoint, params: current.params, readOnly: true, recycleBin: true }} key={selected} />
+      <ResourcePage cfg={{ ...current.cfg, title: `${current.title} in recycle bin`, endpoint: current.endpoint, params, readOnly: true, recycleBin: true }} key={selected} />
     </div>
   )
 }
