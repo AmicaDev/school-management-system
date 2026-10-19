@@ -253,7 +253,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 }
 
 /* ===== Splash screen ===== */
-.splash { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: #0b1a3a; color: #fff; animation: splashOut .6s ease 1.4s forwards; }
+.splash { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: #0b1a3a; color: #fff; animation: splashOut .6s ease 14.4s forwards; }
 .splash-inner { text-align: center; display: flex; flex-direction: column; align-items: center; gap: var(--sp-5); }
 .splash-badge { width: min(220px, 60vw); height: auto; border-radius: 50%; box-shadow: 0 20px 60px rgba(0,0,0,.45); animation: splashPop .7s ease both; }
 .splash-slogan { font-size: clamp(1rem, 2.4vw, 1.35rem); font-weight: 700; letter-spacing: -.01em; color: #eaf1fb; margin: 0; }
@@ -261,10 +261,10 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 @keyframes splashOut { to { opacity: 0; visibility: hidden; } }
 
 /* ===== Redesigned auth page (Uganda flag + school badge) ===== */
-.auth-stripes { position: fixed; left: 0; right: 0; height: 14px; z-index: 10; display: flex; }
+.auth-stripes { position: fixed; left: 0; right: 0; height: 9px; z-index: 10; display: flex; flex-direction: column; }
 .auth-stripes.top { top: 0; }
 .auth-stripes.bottom { bottom: 0; }
-.auth-stripes .stripe { flex: 1; }
+.auth-stripes .stripe { flex: 1; width: 100%; }
 .auth-stripes .s-black { background: #000000; }
 .auth-stripes .s-yellow { background: #FFD100; }
 .auth-stripes .s-red { background: #E8112D; }
@@ -277,7 +277,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 .auth-roles { color: #9a9a9a; font-size: var(--fs-sm); letter-spacing: .08em; text-transform: uppercase; }
 
 .auth-main { position: relative; background: #f7f7f5; display: grid; place-items: center; padding: var(--sp-7) var(--sp-5); overflow: hidden; }
-.auth-main .auth-watermark { position: absolute; inset: 0; background-repeat: no-repeat; background-position: center; background-size: cover; opacity: 0.10; pointer-events: none; }
+.auth-main .auth-watermark { position: absolute; inset: 0; background-repeat: no-repeat; background-position: center; background-size: cover; opacity: 0.28; pointer-events: none; }
 .auth-card { width: min(440px, 100%); position: relative; z-index: 1; }
 .auth-card h1 { font-size: clamp(1.8rem, 4vw, 2.4rem); margin-bottom: var(--sp-2); color: #111111; }
 .auth-sub { color: #4a4a4a; font-size: var(--fs-sm); margin-bottom: var(--sp-4); }
@@ -295,6 +295,6 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 
 @media (max-width: 860px) {
   .auth-wrap { grid-template-columns: 1fr; }
-  .auth-side { display: none; }
-  .auth-stripes { display: none; }
+  .auth-side { padding: var(--sp-4); }
+  .auth-emblem img { width: min(160px, 45vw); }
 }
