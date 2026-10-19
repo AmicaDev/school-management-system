@@ -23,7 +23,7 @@ function Splash() {
     <div className="splash" role="status" aria-label="Loading school management system">
       <div className="splash-inner">
         <img src={badgeImg} alt="Kiyingi Memorial Secondary School" className="splash-badge" />
-        <p className="splash-slogan">Welcome back to Kiyingi Memoeial SS Managemnt System</p>
+        <p className="splash-slogan">Welcome back to Kiyingi Memorial SS Managemnt System</p>
       </div>
     </div>
   )
