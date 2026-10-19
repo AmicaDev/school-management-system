@@ -1,17 +1,54 @@
+import re
+
 from django.contrib.auth import password_validation
-from django.db.models import Q
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import User
 from .passwords import check_password_strength
 
+# "ICT 220", "ict-220" and "ICT220" are the same code for a teacher.
+_CODE_STRIP = re.compile(r"[^a-z0-9]+")
+# Class part of a typed subject, e.g. "P1", "S.2", "Senior 3", "Primary 1".
+_CLASS_TOKEN = re.compile(r"\b((?:s\.?|senior\s*|p\.?|primary\s*)[1-6])\b", re.I)
+_DIGIT = re.compile(r"([1-9])")
+
+
+def _norm(value):
+    """Lower-case alphanumeric form of a value, so spacing and case never block a sign-in."""
+    return _CODE_STRIP.sub("", str(value or "").lower())
+
+
+def _initials(value):
+    """Initials of a subject name, so 'Information Communication Technology' also answers to 'ICT'."""
+    return "".join(part[0] for part in re.split(r"[^A-Za-z0-9]+", str(value or "")) if part)
+
+
+def _class_key(value):
+    """Class letters and number of a class name, e.g. 'Senior 2' -> ('S', '2')."""
+    text = str(value or "")
+    letter = next((c.upper() for c in text if c.isalpha()), "")
+    digit = _DIGIT.search(text)
+    return (letter if letter in ("S", "P") else "", digit.group(1) if digit else "")
+
+
+def _class_matches(hint, class_name):
+    """True when a class hint such as 'S2' points at the given class."""
+    letter, digit = hint
+    if not digit:
+        return True
+    c_letter, c_digit = _class_key(class_name)
+    if c_digit and c_digit != digit:
+        return False
+    if letter and c_letter and letter != c_letter:
+        return False
+    return True
+
 
 class LoginSerializer(TokenObtainPairSerializer):
-    """Accepts usernames, parent student indexes, and assigned teacher subject codes."""
+    """Accepts usernames, parent student indexes, and teacher subject names with subject codes."""
 
     def validate(self, attrs):
-        import re
         ident = (attrs.get(self.username_field) or "").strip()
         pwd = (attrs.get("password") or "").strip()
 
@@ -37,81 +74,91 @@ class LoginSerializer(TokenObtainPairSerializer):
                 data["user"] = UserSerializer(self.user).data
                 return data
 
-        # 3. Teacher sign-in via teaching subject and subject code
+        # 3. Teacher sign-in with the subject they teach and its subject code
         if pwd:
-            from apps.academics.models import TeachingAssignment
-
-            assignments = TeachingAssignment.objects.filter(
-                teacher__role=User.Role.TEACHER,
-                teacher__is_active=True,
-            ).filter(
-                Q(teacher__teacher_profile__isnull=True) | Q(teacher__teacher_profile__is_archived=False)
-            ).filter(
-                Q(teacher_subject_code__iexact=pwd) | Q(subject__code__iexact=pwd)
-            )
-
-            matching_ids = []
-            if assignments.exists():
-                # Direct teacher username match
-                direct = assignments.filter(teacher__username__iexact=ident)
-                if direct.exists():
-                    matching_ids = list(direct.values_list("teacher_id", flat=True).distinct()[:2])
-
-                # Direct subject name or code match
-                if not matching_ids:
-                    by_subject = assignments.filter(
-                        Q(subject__name__iexact=ident) | Q(subject__code__iexact=ident)
-                    )
-                    matching_ids = list(by_subject.values_list("teacher_id", flat=True).distinct()[:2])
-
-                # Class-qualified subject match, e.g. "Math S1", "Maths S.1", "Math Senior 1", "Math P1"
-                if not matching_ids:
-                    class_match = re.search(r'\b(?:s\.?|senior\s*|p\.?|primary\s*)([1-6])\b', ident, re.I)
-                    subj_part = re.sub(r'\b(?:s\.?|senior\s*|p\.?|primary\s*)[1-6]\b', '', ident, flags=re.I).strip(" -_()")
-                    filtered = assignments
-                    if class_match:
-                        c_digit = class_match.group(1)
-                        filtered = filtered.filter(
-                            Q(stream__school_class__name__icontains=f"S{c_digit}") |
-                            Q(stream__school_class__name__icontains=f"P{c_digit}") |
-                            Q(stream__school_class__name__icontains=f"Senior {c_digit}") |
-                            Q(stream__school_class__name__icontains=f"Primary {c_digit}") |
-                            Q(stream__school_class__name__icontains=c_digit)
-                        )
-                    if subj_part:
-                        filtered = filtered.filter(
-                            Q(subject__name__icontains=subj_part) |
-                            Q(subject__code__icontains=subj_part)
-                        )
-                    matching_ids = list(filtered.values_list("teacher_id", flat=True).distinct()[:2])
-
-                # Substring/fuzzy match on subject name (e.g. "Math" matches "Mathematics")
-                if not matching_ids:
-                    fuzzy = assignments.filter(subject__name__icontains=ident)
-                    matching_ids = list(fuzzy.values_list("teacher_id", flat=True).distinct()[:2])
-
-                if not matching_ids:
-                    for part in ident.split():
-                        part = part.strip()
-                        if len(part) >= 3:
-                            fuzzy = assignments.filter(Q(subject__name__icontains=part) | Q(subject__code__icontains=part))
-                            f_ids = list(fuzzy.values_list("teacher_id", flat=True).distinct()[:2])
-                            if len(f_ids) == 1:
-                                matching_ids = f_ids
-                                break
-
-                if len(matching_ids) == 1:
-                    self.user = User.objects.get(pk=matching_ids[0])
-                    refresh = self.get_token(self.user)
-                    return {
-                        "refresh": str(refresh),
-                        "access": str(refresh.access_token),
-                        "user": UserSerializer(self.user).data,
-                    }
+            teacher = self._teacher_for(ident, pwd)
+            if teacher is not None:
+                self.user = teacher
+                refresh = self.get_token(teacher)
+                return {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                    "user": UserSerializer(teacher).data,
+                }
 
         data = super().validate(attrs)
         data["user"] = UserSerializer(self.user).data
         return data
+
+    @staticmethod
+    def _teacher_for(ident, pwd):
+        """Resolve the teacher signing in with a subject name and that subject's code."""
+        from apps.academics.models import TeachingAssignment
+
+        code = _norm(pwd)
+        if not code:
+            return None
+
+        assignments = list(
+            TeachingAssignment.objects.filter(
+                teacher__role=User.Role.TEACHER,
+                teacher__is_active=True,
+            ).select_related("teacher", "teacher__teacher_profile", "subject", "stream__school_class")
+        )
+        assignments = [
+            a for a in assignments
+            if not (getattr(a.teacher, "teacher_profile", None) and a.teacher.teacher_profile.is_archived)
+        ]
+
+        # The code assigned to a teacher is more precise than the code of the subject itself.
+        pool = [a for a in assignments if _norm(a.teacher_subject_code) == code]
+        if not pool:
+            pool = [a for a in assignments if _norm(a.subject.code) == code]
+        if not pool:
+            return None
+
+        hint = _CLASS_TOKEN.search(ident)
+        subject_part = _CLASS_TOKEN.sub(" ", ident).strip(" -_().") if hint else ident
+        subject_key = _norm(subject_part)
+        hint_key = _class_key(hint.group(1)) if hint else ("", "")
+
+        scored = []
+        for a in pool:
+            if subject_key and _norm(a.teacher.username) == subject_key:
+                rank = 3  # the teacher signed in with their own username
+            elif _norm(a.subject.name) == subject_key or _norm(a.subject.code) == subject_key:
+                rank = 2  # exact subject name or subject code
+            elif _norm(a.teacher_subject_code) == subject_key:
+                rank = 2  # the code they were given for this assignment
+            elif len(subject_key) >= 2 and _initials(a.subject.name) == subject_key:
+                rank = 2  # initials, e.g. "ICT"
+            elif len(subject_key) >= 3 and (
+                _norm(a.subject.name).startswith(subject_key) or subject_key in _norm(a.subject.name)
+            ):
+                rank = 1  # partial subject name, e.g. "Math" for "Mathematics"
+            else:
+                rank = 0
+            scored.append((rank, a))
+
+        if hint_key[1]:
+            narrowed = [x for x in scored if _class_matches(hint_key, x[1].stream.school_class.name)]
+            if narrowed:
+                scored = narrowed
+
+        if subject_key:
+            best = max(rank for rank, _ in scored)
+            if best == 0:
+                return None
+            scored = [x for x in scored if x[0] == best]
+
+        teachers = {a.teacher_id for _, a in scored}
+        if len(teachers) == 1:
+            return User.objects.get(pk=teachers.pop())
+        if len(teachers) > 1:
+            raise serializers.ValidationError({
+                "username": "More than one teacher is assigned this subject. Add the class to the username, for example 'English S2'."
+            })
+        return None
 
 
 class UserSerializer(serializers.ModelSerializer):
