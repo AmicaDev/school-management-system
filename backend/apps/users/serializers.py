@@ -163,6 +163,18 @@ class LoginSerializer(TokenObtainPairSerializer):
         return 0
 
     @staticmethod
+    def _signin_error(ident, name_key, subject):
+        """Explain what a teacher sign-in is missing, instead of a bare 'wrong credentials'."""
+        if subject is None or not _names_subject(name_key, subject):
+            return None
+        account = User.objects.filter(role=User.Role.TEACHER, username__iexact=ident.strip()).first()
+        if account is not None and not LoginSerializer._is_signable_teacher(account):
+            return None  # an archived or inactive account keeps the generic rejection
+        detail = (f"No teacher is signed in with the subject code '{subject.code}' yet. "
+                  f"Ask the administrator to assign '{subject.name}' to a teacher.")
+        return serializers.ValidationError({"username": detail})
+
+    @staticmethod
     def _teacher_for(ident, pwd):
         """Resolve the teacher signing in with a subject name and that subject's code."""
         code = _norm(pwd)
@@ -188,6 +200,9 @@ class LoginSerializer(TokenObtainPairSerializer):
                 if LoginSerializer._is_signable_teacher(teacher):
                     pool.append({"teacher": teacher, "subject": subject, "code": code, "class": ""})
         if not pool:
+            error = LoginSerializer._signin_error(ident, name_key, subject)
+            if error is not None:
+                raise error
             return None
 
         if hint_key[1]:
