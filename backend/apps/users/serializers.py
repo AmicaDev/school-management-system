@@ -45,6 +45,17 @@ def _class_matches(hint, class_name):
     return True
 
 
+def _names_subject(name_key, subject):
+    """True when a typed name points at the subject, e.g. 'History', 'hist' or 'H' for History."""
+    if not name_key or subject is None:
+        return False
+    if _norm(subject.name) == name_key or _norm(subject.code) == name_key:
+        return True
+    if len(name_key) >= 2 and _initials(subject.name) == name_key:
+        return True
+    return len(name_key) >= 3 and name_key in _norm(subject.name)
+
+
 class LoginSerializer(TokenObtainPairSerializer):
     """Accepts usernames, parent student indexes, and teacher subject names with subject codes."""
 
@@ -91,67 +102,106 @@ class LoginSerializer(TokenObtainPairSerializer):
         return data
 
     @staticmethod
+    def _is_signable_teacher(user):
+        """True when a teacher account may still sign in: active and not archived."""
+        if not user.is_active or user.role != User.Role.TEACHER:
+            return False
+        profile = getattr(user, "teacher_profile", None)
+        return not (profile and profile.is_archived)
+
+    @staticmethod
+    def _bindings():
+        """Every teacher/subject pairing the school recorded, with the code the administrator set."""
+        from apps.academics.models import TeachingAssignment
+        from apps.timetable.models import TimetableEntry
+
+        rows = []
+        sources = (
+            (TeachingAssignment.objects.filter(teacher__role=User.Role.TEACHER, teacher__is_active=True),
+             lambda row: row.teacher_subject_code),
+            (TimetableEntry.objects.filter(teacher__role=User.Role.TEACHER, teacher__is_active=True),
+             lambda row: ""),
+        )
+        for queryset, code_of in sources:
+            for row in queryset.select_related("teacher", "teacher__teacher_profile", "subject", "stream__school_class"):
+                if not LoginSerializer._is_signable_teacher(row.teacher):
+                    continue
+                rows.append({
+                    "teacher": row.teacher,
+                    "subject": row.subject,
+                    "code": code_of(row),
+                    "class": row.stream.school_class.name if row.stream_id else "",
+                })
+        return rows
+
+    @staticmethod
+    def _subject_for_code(code):
+        """The subject whose own code matches, ignoring case and separators."""
+        from apps.academics.models import Subject
+
+        for subject in Subject.objects.all():
+            if _norm(subject.code) == code:
+                return subject
+        return None
+
+    @staticmethod
+    def _rank(binding, name_key):
+        """How well a typed name matches a teacher's subject (3 = the teacher's own username)."""
+        teacher, subject, teacher_code = binding["teacher"], binding["subject"], binding["code"]
+        if not name_key:
+            return 1
+        if _norm(teacher.username) == name_key:
+            return 3  # the teacher signed in with their own username
+        if _norm(subject.name) == name_key or _norm(subject.code) == name_key:
+            return 2  # exact subject name or subject code
+        if _norm(teacher_code) == name_key:
+            return 2  # the code they were given for this assignment
+        if len(name_key) >= 2 and _initials(subject.name) == name_key:
+            return 2  # initials, e.g. "ICT"
+        if len(name_key) >= 3 and name_key in _norm(subject.name):
+            return 1  # partial subject name, e.g. "Math" for "Mathematics"
+        return 0
+
+    @staticmethod
     def _teacher_for(ident, pwd):
         """Resolve the teacher signing in with a subject name and that subject's code."""
-        from apps.academics.models import TeachingAssignment
-
         code = _norm(pwd)
-        if not code:
-            return None
-
-        assignments = list(
-            TeachingAssignment.objects.filter(
-                teacher__role=User.Role.TEACHER,
-                teacher__is_active=True,
-            ).select_related("teacher", "teacher__teacher_profile", "subject", "stream__school_class")
-        )
-        assignments = [
-            a for a in assignments
-            if not (getattr(a.teacher, "teacher_profile", None) and a.teacher.teacher_profile.is_archived)
-        ]
-
-        # The code assigned to a teacher is more precise than the code of the subject itself.
-        pool = [a for a in assignments if _norm(a.teacher_subject_code) == code]
-        if not pool:
-            pool = [a for a in assignments if _norm(a.subject.code) == code]
-        if not pool:
+        if not code or not ident.strip():
             return None
 
         hint = _CLASS_TOKEN.search(ident)
         subject_part = _CLASS_TOKEN.sub(" ", ident).strip(" -_().") if hint else ident
-        subject_key = _norm(subject_part)
+        name_key = _norm(subject_part)
         hint_key = _class_key(hint.group(1)) if hint else ("", "")
 
-        scored = []
-        for a in pool:
-            if subject_key and _norm(a.teacher.username) == subject_key:
-                rank = 3  # the teacher signed in with their own username
-            elif _norm(a.subject.name) == subject_key or _norm(a.subject.code) == subject_key:
-                rank = 2  # exact subject name or subject code
-            elif _norm(a.teacher_subject_code) == subject_key:
-                rank = 2  # the code they were given for this assignment
-            elif len(subject_key) >= 2 and _initials(a.subject.name) == subject_key:
-                rank = 2  # initials, e.g. "ICT"
-            elif len(subject_key) >= 3 and (
-                _norm(a.subject.name).startswith(subject_key) or subject_key in _norm(a.subject.name)
-            ):
-                rank = 1  # partial subject name, e.g. "Math" for "Mathematics"
-            else:
-                rank = 0
-            scored.append((rank, a))
+        bindings = LoginSerializer._bindings()
+        subject = LoginSerializer._subject_for_code(code)
+
+        # The code assigned to a teacher is more precise than the code of the subject itself.
+        pool = [b for b in bindings if _norm(b["code"]) == code]
+        if not pool and subject is not None:
+            pool = [b for b in bindings if b["subject"].pk == subject.pk]
+        if subject is not None and _names_subject(name_key, subject):
+            # The account may be named after the subject it teaches, e.g. 'HISTORY' for History.
+            named = User.objects.filter(role=User.Role.TEACHER, is_active=True, username__iexact=subject_part.strip())
+            for teacher in named:
+                if LoginSerializer._is_signable_teacher(teacher):
+                    pool.append({"teacher": teacher, "subject": subject, "code": code, "class": ""})
+        if not pool:
+            return None
 
         if hint_key[1]:
-            narrowed = [x for x in scored if _class_matches(hint_key, x[1].stream.school_class.name)]
+            narrowed = [b for b in pool if _class_matches(hint_key, b["class"])]
             if narrowed:
-                scored = narrowed
+                pool = narrowed
 
-        if subject_key:
-            best = max(rank for rank, _ in scored)
-            if best == 0:
-                return None
-            scored = [x for x in scored if x[0] == best]
+        ranked = [(LoginSerializer._rank(b, name_key), b) for b in pool]
+        best = max((rank for rank, _ in ranked), default=0)
+        if best:
+            # Keep only the best matches; an unmatched name falls back to the code alone.
+            pool = [b for rank, b in ranked if rank == best]
 
-        teachers = {a.teacher_id for _, a in scored}
+        teachers = {b["teacher"].pk for b in pool}
         if len(teachers) == 1:
             return User.objects.get(pk=teachers.pop())
         if len(teachers) > 1:
