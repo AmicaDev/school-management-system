@@ -34,6 +34,13 @@ export function AuthProvider({ children }) {
     return data.user
   }, [])
 
-  const value = useMemo(() => ({ user, loading, login, logout, setUser }), [user, loading, login, logout])
+  const teacherLogin = useCallback(async (identifier, code) => {
+    const { data } = await api.post('/auth/teacher/login/', { identifier, code }, { timeout: 90000 })
+    tokens.set({ access: data.access, refresh: data.refresh })
+    setUser(data.user)
+    return data.user
+  }, [])
+
+  const value = useMemo(() => ({ user, loading, login, teacherLogin, logout, setUser }), [user, loading, login, teacherLogin, logout])
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>
 }

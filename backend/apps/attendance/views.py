@@ -15,10 +15,19 @@ from .models import AttendanceRecord, SyncTransaction
 
 class AttendanceSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source="student.full_name", read_only=True)
+    gender = serializers.CharField(source="student.gender", read_only=True, default="")
+    class_name = serializers.CharField(source="stream.school_class.name", read_only=True, default="")
+    stream_name = serializers.CharField(source="stream.name", read_only=True, default="")
+    subject_name = serializers.CharField(source="subject.name", read_only=True, default="")
+    term_name = serializers.CharField(source="term.name", read_only=True, default="")
+    academic_year = serializers.CharField(source="term.year.name", read_only=True, default="")
 
     class Meta:
         model = AttendanceRecord
-        fields = ["id", "student", "student_name", "stream", "subject", "date", "status", "term"]
+        fields = [
+            "id", "student", "student_name", "gender", "class_name", "stream_name", "stream",
+            "subject", "subject_name", "date", "status", "term", "term_name", "academic_year"
+        ]
 
 
 class BulkRecord(serializers.Serializer):
@@ -37,13 +46,24 @@ class BulkAttendance(serializers.Serializer):
 class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsSchoolUser]
     serializer_class = AttendanceSerializer
-    filterset_fields = {"stream": ["exact"], "student": ["exact"], "date": ["exact", "gte", "lte"], "status": ["exact"],
-                        "subject": ["exact"]}
+    filterset_fields = {
+        "stream": ["exact"],
+        "stream__school_class": ["exact"],
+        "student": ["exact"],
+        "student__gender": ["exact"],
+        "date": ["exact", "gte", "lte"],
+        "status": ["exact"],
+        "subject": ["exact"],
+        "term": ["exact"],
+        "term__year": ["exact"],
+    }
     search_fields = ["student__first_name", "student__last_name", "student__index_no"]
 
     def get_queryset(self):
         ids = visible_students(self.request.user).values("id")
-        return AttendanceRecord.objects.filter(student__in=ids).select_related("student")
+        return AttendanceRecord.objects.filter(student__in=ids).select_related(
+            "student", "stream__school_class", "subject", "term__year"
+        )
 
     @action(detail=False, methods=["post"])
     def bulk(self, request):

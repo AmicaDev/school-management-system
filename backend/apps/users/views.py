@@ -11,9 +11,10 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from rest_framework import mixins, status, viewsets
+from django.core.cache import cache
+from rest_framework import exceptions, mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import AuthenticationFailed, Throttled, ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -29,7 +30,8 @@ from .models import User
 from .passwords import check_password_strength
 from .permissions import IsAdmin, IsDeveloper
 from .serializers import (ChangePasswordSerializer, DeveloperAdminAccountSerializer, LoginSerializer,
-                          ManagedUserSerializer, ResetConfirmSerializer, ResetRequestSerializer, UserSerializer)
+                          ManagedUserSerializer, ResetConfirmSerializer, ResetRequestSerializer,
+                          TeacherLoginSerializer, UserSerializer)
 
 
 class LoginView(TokenObtainPairView):
@@ -48,6 +50,63 @@ class LoginView(TokenObtainPairView):
         else:
             audit(request, "LOGIN_FAILED", "auth", ident, "FAILURE", actor=None)
         return response
+
+
+class TeacherLoginView(APIView):
+    """
+    Dedicated sign-in view for teachers using teacher identifier and admin-issued code.
+    Throttled at 10/min, with a 5-minute lockout after 5 consecutive failed attempts on an identifier.
+    Audit events: TEACHER_LOGIN (success), TEACHER_LOGIN_FAILED (failure).
+    """
+    permission_classes = []
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "teacher_login"
+    www_authenticate_realm = "api"
+
+    def get_authenticate_header(self, request):
+        return 'Bearer realm="api"'
+
+    def post(self, request, *args, **kwargs):
+        ident = str(request.data.get("identifier") or request.data.get("username") or "")[:150]
+        cache_ident = re.sub(r"[^a-zA-Z0-9]+", "_", ident).strip("_").lower()
+
+        # Check per-identifier lockout
+        # Note on caching: When REDIS_URL is not set (e.g. in development or single-dyno setups),
+        # Django falls back to LocMemCache which is per-process. In a multi-worker environment without Redis,
+        # per-identifier failure counts are tracked per process. This degrades gracefully while still
+        # protecting against rapid brute-force attacks on any individual worker.
+        lockout_key = f"teacher_lockout:{cache_ident}"
+        if cache_ident and cache.get(lockout_key):
+            audit(request, "TEACHER_LOGIN_FAILED", "auth", ident, "FAILURE", actor=None)
+            raise Throttled(detail="Too many failed login attempts. Please try again later.")
+
+        serializer = TeacherLoginSerializer(data=request.data, context={"request": request})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except (exceptions.AuthenticationFailed, exceptions.NotAuthenticated):
+            if cache_ident:
+                fail_key = f"teacher_fail_count:{cache_ident}"
+                fails = cache.get(fail_key, 0) + 1
+                if fails >= 5:
+                    cache.set(lockout_key, True, timeout=300)
+                    cache.delete(fail_key)
+                else:
+                    cache.set(fail_key, fails, timeout=300)
+            audit(request, "TEACHER_LOGIN_FAILED", "auth", ident, "FAILURE", actor=None)
+            raise
+        except Exception:
+            audit(request, "TEACHER_LOGIN_FAILED", "auth", ident, "FAILURE", actor=None)
+            raise
+
+        if cache_ident:
+            cache.delete(f"teacher_fail_count:{cache_ident}")
+            cache.delete(lockout_key)
+
+        user_data = serializer.validated_data.get("user")
+        user = User.objects.filter(pk=user_data["id"]).first() if user_data else None
+        audit(request, "TEACHER_LOGIN", "auth", ident, "SUCCESS", actor=user)
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
 class LogoutView(APIView):
@@ -172,6 +231,37 @@ class UserViewSet(AuditMixin, viewsets.ModelViewSet):
             instance.admin_deactivated_at = timezone.now()
         instance.save(update_fields=["is_active", "admin_deactivated_at", "updated_at"])
         audit(self.request, "DEACTIVATE", "users", instance.username, "SUCCESS")
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.query_params.get("permanent") == "true":
+            if instance.role == User.Role.ADMIN:
+                return Response({"detail": "Administrator accounts cannot be permanently deleted."}, status=status.HTTP_400_BAD_REQUEST)
+            username = instance.username
+            instance.delete()
+            audit(request, "PERMANENT_DELETE", "users", username, "SUCCESS")
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=["delete"], url_path="permanent-delete")
+    def permanent_delete(self, request, pk=None):
+        instance = self.get_object()
+        if instance.role == User.Role.ADMIN:
+            return Response({"detail": "Administrator accounts cannot be permanently deleted."}, status=status.HTTP_400_BAD_REQUEST)
+        username = instance.username
+        instance.delete()
+        audit(request, "PERMANENT_DELETE", "users", username, "SUCCESS")
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"])
+    def restore(self, request, pk=None):
+        instance = self.get_object()
+        instance.is_active = True
+        if instance.role == User.Role.ADMIN:
+            instance.admin_deactivated_at = None
+        instance.save(update_fields=["is_active", "admin_deactivated_at", "updated_at"])
+        audit(request, "RESTORE", "users", instance.username, "SUCCESS")
+        return Response(self.get_serializer(instance).data)
 
     @action(detail=True, methods=["post"])
     def reset_password(self, request, pk=None):

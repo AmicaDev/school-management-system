@@ -1,5 +1,5 @@
 /* Service worker: offline shell + runtime caching. Bump VERSION to force clients to update. */
-const VERSION = 'sms-v1.0.1'
+const VERSION = 'sms-v1.1.0'
 const SHELL = `${VERSION}-shell`
 const RUNTIME = `${VERSION}-runtime`
 const API_CACHE = `${VERSION}-api`

@@ -133,25 +133,162 @@ function BatchCards({ stream, termId }) {
   )
 }
 
-/** Class results for a stream/term, with report-card downloads. Used by Admin Results/Reports and Teacher classes. */
+function getIdentifierInfo(c1) {
+  if (c1 == null) return { ident: '—', desc: '—' }
+  const raw = Math.round(Number(c1))
+  if (raw <= 1) return { ident: 1, desc: 'BASIC' }
+  if (raw === 2) return { ident: 2, desc: 'MODERATE' }
+  return { ident: 3, desc: 'OUTSTANDING' }
+}
+
+/** Class results for a stream/term, with teacher marks breakdown and report-card downloads. */
 export function ClassResults({ downloads = true }) {
   const { terms, active } = useTerms()
   const streams = useFetch('/academics/streams/')
+  const subjects = useFetch('/academics/subjects/', { is_archived: false })
   const [stream, setStream] = useState('')
   const [termId, setTermId] = useState(null)
+  const [subjectFilter, setSubjectFilter] = useState('')
+  const [viewMode, setViewMode] = useState(downloads ? 'summary' : 'detailed')
   const [busy, setBusy] = useState(null)
+
   useEffect(() => { if (active && !termId) setTermId(active.id) }, [active, termId])
-  const res = useFetch(stream && termId ? '/results/class-summary/' : null, { stream, term: termId })
-  const cols = [{ key: 'index_no', label: 'Index no.' }, { key: 'name', label: 'Student' }, { key: 'subjects', label: 'Subjects' }, { key: 'average', label: 'Average %' }, { key: 'grade', label: 'Grade' }, { key: 'position', label: 'Position' },
-    ...(downloads ? [{ key: 'pdf', label: '', render: (r) => <button className="btn sm" disabled={busy === r.id} onClick={async () => { setBusy(r.id); try { await downloadFile(`/reports/report-card/${r.id}/${termId}/`, `report-card-${r.index_no}.pdf`) } catch (e) { alert(errorMessage(e)) } setBusy(null) }}>{busy === r.id ? '…' : 'Report card PDF'}</button> }] : []),
-    { key: 'p', label: '', render: (r) => <Link className="btn sm" to={`/admin/students/${r.id}`}>Profile</Link> }]
+
+  const res = useFetch(stream && termId ? '/results/class-summary/' : null, { stream, term: termId, detailed: 1 })
+
+  // Summary columns
+  const summaryCols = [
+    { key: 'index_no', label: 'Index no.' },
+    { key: 'name', label: 'Student' },
+    { key: 'subjects', label: 'Subjects' },
+    { key: 'average', label: 'Average %' },
+    { key: 'grade', label: 'Grade' },
+    { key: 'position', label: 'Position' },
+    ...(downloads ? [{
+      key: 'pdf', label: '',
+      render: (r) => (
+        <button className="btn sm" disabled={busy === r.id} onClick={async () => {
+          setBusy(r.id)
+          try { await downloadFile(`/reports/report-card/${r.id}/${termId}/`, `report-card-${r.index_no}.pdf`) } catch (e) { alert(errorMessage(e)) }
+          setBusy(null)
+        }}>
+          {busy === r.id ? '…' : 'Report card PDF'}
+        </button>
+      ),
+    }] : []),
+    { key: 'p', label: '', render: (r) => <Link className="btn sm" to={`/admin/students/${r.id}`}>Profile</Link> },
+  ]
+
+  // Flattened teacher-submitted marks breakdown
+  const markRows = useMemo(() => {
+    if (!res.data || !Array.isArray(res.data)) return []
+    const out = []
+    res.data.forEach((student) => {
+      const subList = student.report?.subjects || []
+      subList.forEach((sub) => {
+        if (subjectFilter && String(sub.subject_id) !== String(subjectFilter)) return
+        const rawComps = sub.raw_components || {}
+        const comps = sub.components || {}
+        const botVal = rawComps['BOT'] != null ? Number(rawComps['BOT']) : (comps['BOT'] != null ? Number(comps['BOT']) : null)
+        const midVal = rawComps['MID'] != null ? Number(rawComps['MID']) : (rawComps['MIDTERM'] != null ? Number(rawComps['MIDTERM']) : (comps['MID'] != null ? Number(comps['MID']) : null))
+        const eotVal = rawComps['FINAL'] != null ? Number(rawComps['FINAL']) : (rawComps['EOT'] != null ? Number(rawComps['EOT']) : (comps['FINAL'] != null ? Number(comps['FINAL']) : (comps['EOT'] != null ? Number(comps['EOT']) : null)))
+
+        const col20 = botVal != null ? botVal : null
+        const c1Raw = sub.c1 != null ? Number(sub.c1) : (col20 != null ? (col20 / 20.0) * 3.0 : (comps['C1'] != null ? Number(comps['C1']) : null))
+        const c1 = c1Raw != null ? Number(c1Raw.toFixed(1)) : null
+
+        const c2Raw = sub.c2 != null ? Number(sub.c2) : (midVal != null ? (midVal / 20.0) * 3.0 : c1)
+        const c2 = c2Raw != null ? Number(c2Raw.toFixed(1)) : c1
+
+        const avgRaw = (c1 != null && c2 != null) ? (c1 + c2) / 2.0 : (c1 != null ? c1 : c2)
+        const avg = avgRaw != null ? Number(avgRaw.toFixed(1)) : null
+        const idInfo = getIdentifierInfo(avg != null ? avg : c1)
+
+        const final100 = sub.total != null
+          ? Number(sub.total)
+          : (col20 != null && eotVal != null ? (col20 + eotVal) : (eotVal != null ? eotVal : (col20 != null ? col20 : null)))
+
+        out.push({
+          id: `${student.id}-${sub.subject_id}`,
+          student_id: student.id,
+          name: student.name,
+          index_no: student.index_no,
+          subject: sub.subject,
+          bot: col20 != null ? col20 : '—',
+          c1: c1 != null ? c1 : '—',
+          avg: avg != null ? avg : '—',
+          ident: idInfo.ident,
+          descr: idInfo.desc,
+          mid: midVal != null ? midVal : '—',
+          eot: eotVal != null ? eotVal : '—',
+          final_mark: final100 != null ? `${final100}%` : '—',
+          grade: sub.grade || '—',
+          remark: sub.remark || '—',
+          tr_initials: sub.teacher_initials || 'TR',
+        })
+      })
+    })
+    return out
+  }, [res.data, subjectFilter])
+
+  const detailedCols = [
+    { key: 'name', label: 'Name of student' },
+    { key: 'subject', label: 'Subject' },
+    { key: 'bot', label: 'BOT (out of 20)' },
+    { key: 'c1', label: 'C1' },
+    { key: 'avg', label: 'AVG' },
+    { key: 'ident', label: 'IDENT' },
+    { key: 'descr', label: 'DESCR' },
+    { key: 'mid', label: 'Mid-Term' },
+    { key: 'eot', label: 'End Of Term (Out of 80)' },
+    { key: 'final_mark', label: 'Final Mark (100)' },
+    { key: 'grade', label: 'GRADE' },
+    { key: 'remark', label: 'REMARKS' },
+    { key: 'tr_initials', label: 'TR INITIALS' },
+  ]
+
   return (
     <section className="panel">
-      <div className="panel-head"><h2>Class results</h2>
-        <div className="row"><select className="input" style={{ width: 'auto' }} value={stream} onChange={(e) => setStream(e.target.value)} aria-label="Class and stream"><option value="">Select class & stream</option>{items(streams.data).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
-          <TermSelect terms={terms} value={termId} onChange={setTermId} /></div></div>
+      <div className="panel-head">
+        <h2>Results & Submitted Marks</h2>
+        <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <select className="input" style={{ width: 'auto' }} value={stream} onChange={(e) => setStream(e.target.value)} aria-label="Class and stream">
+            <option value="">Select class & stream</option>
+            {items(streams.data).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+          <TermSelect terms={terms} value={termId} onChange={setTermId} />
+          {viewMode === 'detailed' && (
+            <select className="input" style={{ width: 'auto' }} value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)} aria-label="Filter by subject">
+              <option value="">All subjects</option>
+              {items(subjects.data).map((sub) => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
+            </select>
+          )}
+          <div className="row" style={{ gap: 4 }}>
+            <button type="button" className={`btn sm${viewMode === 'detailed' ? ' primary' : ''}`} onClick={() => setViewMode('detailed')}>Teacher Marks</button>
+            <button type="button" className={`btn sm${viewMode === 'summary' ? ' primary' : ''}`} onClick={() => setViewMode('summary')}>Class Summary</button>
+          </div>
+        </div>
+      </div>
       {downloads && stream && termId && <BatchCards stream={stream} termId={termId} />}
-      {!stream ? <Empty title="Choose a class and stream" /> : res.loading ? <Skeleton rows={5} /> : res.error ? <ErrorState message={res.error} onRetry={res.reload} /> : !res.data.length ? <Empty title="No students in this stream" /> : <Table columns={cols} rows={res.data} />}
+      {!stream ? (
+        <Empty title="Choose a class and stream">Select a class stream and academic term above to view submitted marks.</Empty>
+      ) : res.loading ? (
+        <Skeleton rows={6} />
+      ) : res.error ? (
+        <ErrorState message={res.error} onRetry={res.reload} />
+      ) : !res.data.length ? (
+        <Empty title="No students in this stream" />
+      ) : viewMode === 'detailed' ? (
+        !markRows.length ? (
+          <Empty title="No marks submitted yet">Teachers have not entered marks for this class and term.</Empty>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <Table columns={detailedCols} rows={markRows} />
+          </div>
+        )
+      ) : (
+        <Table columns={summaryCols} rows={res.data} />
+      )}
     </section>
   )
 }

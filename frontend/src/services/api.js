@@ -25,7 +25,7 @@ api.interceptors.response.use(
     if (response?.status === 503 && response.data?.maintenance && !location.pathname.startsWith('/maintenance')) {
       location.assign('/maintenance')
     }
-    const isAuthCall = config?.url?.includes('/auth/login') || config?.url?.includes('/auth/refresh')
+    const isAuthCall = config?.url?.includes('/auth/login') || config?.url?.includes('/auth/teacher/login') || config?.url?.includes('/auth/refresh')
     if (response?.status === 401 && !config._retry && !isAuthCall && tokens.get()?.refresh) {
       config._retry = true
       try {

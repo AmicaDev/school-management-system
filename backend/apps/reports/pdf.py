@@ -281,16 +281,36 @@ def build_report_card(student, term):
             final_ass = next((a for a in ass_items if a.exam_type.code.upper() in ("FINAL", "EOT", "END", "END_OF_TERM", "E_O_T")), None)
             c1_ass = next((a for a in ass_items if a.exam_type.code.upper() in ("C1", "COMPETENCY1", "COMPETENCY_1")), None)
 
-            # 20% Column: Mid-Term is computed only if BOT marks is not provided
+            # 20% Column: BOT marks out of 20
             if bot_ass:
                 col_20_val = float(bot_ass.score)
                 col_20_str = f"{col_20_val:g}"
-            elif mid_ass:
-                col_20_val = float(mid_ass.score)
+                c1_num = round((col_20_val / 20.0) * 3.0, 1)
+            elif c1_ass:
+                c1_num = round(float(c1_ass.score), 1)
+                col_20_val = round((c1_num / 3.0) * 20.0, 1)
                 col_20_str = f"{col_20_val:g}"
             else:
                 col_20_val = None
                 col_20_str = "-"
+                c1_num = None
+
+            # Mid-Term marks out of 20 converted to C2: ((mid_ass.score / 20) * 3)
+            # Printed in report card but NOT calculated in the final term results
+            if mid_ass:
+                c2_num = round((float(mid_ass.score) / 20.0) * 3.0, 1)
+            else:
+                c2_num = c1_num
+
+            # AVG: Continuous assessment average between C1 and C2
+            if c1_num is not None and c2_num is not None:
+                avg_num = round((c1_num + c2_num) / 2.0, 1)
+            elif c1_num is not None:
+                avg_num = c1_num
+            elif c2_num is not None:
+                avg_num = c2_num
+            else:
+                avg_num = None
 
             # 80% Column: End of term examination (out of 80)
             if final_ass:
@@ -301,6 +321,7 @@ def build_report_card(student, term):
                 col_80_str = "-"
 
             # 100% Final Results: BOT (out of 20) + End of term (out of 80) = FINAL RESULTS out of 100
+            # Mid-Term is NOT included in this total
             if col_20_val is not None and col_80_val is not None:
                 tot_num = round(col_20_val + col_80_val, 1)
             elif col_80_val is not None:
@@ -312,24 +333,12 @@ def build_report_card(student, term):
             total_marks.append(tot_num)
             tot_str = f"{tot_num:.1f}" if tot_num % 1 != 0 else f"{int(tot_num)}"
 
-            # Continuous assessments: AVG = C1, C2. (Meaning C1, C2 and AVG are identical)
-            if c1_ass:
-                c1_num = round(float(c1_ass.score), 1)
-            elif col_20_val is not None:
-                c1_num = round((col_20_val / 20.0) * 3.0, 1)
-            elif tot_num is not None:
-                c1_num = round((tot_num / 100.0) * 3.0, 1)
-            else:
-                c1_num = None
-
-            c2_num = c1_num
-            avg_num = c1_num
-
             # Identifier (IDENT) & Descriptor Rule:
-            # IDENT is the value of C1 rounded to nearest Integer... written as 1, 2 or 3 as calculated.
+            # IDENT is the value of AVG (or C1) rounded to nearest Integer... written as 1, 2 or 3 as calculated.
             # If IDENT is 0-1, DESCRIPTOR = BASIC; IDENT is 2, DESCRIPTOR = MODERATE; IDENT is 3, DESCRIPTOR = OUTSTANDING.
-            if c1_num is not None:
-                ident_int = int(round(c1_num))
+            active_ident_val = avg_num if avg_num is not None else c1_num
+            if active_ident_val is not None:
+                ident_int = int(round(active_ident_val))
                 if ident_int <= 1:
                     ident = 1
                     desc = "BASIC"
@@ -582,7 +591,69 @@ def build_report_card(student, term):
             ])
         )
         el.append(perf_table)
-        el.append(Spacer(1, 4 * mm))
+        el.append(Spacer(1, 3 * mm))
+
+        # A-Level Grading Scale & Points
+        grade_scale_title = Paragraph("<b>GRADING SCALE & POINTS</b>", card_title_style)
+        el.append(grade_scale_title)
+        el.append(Spacer(1, 1 * mm))
+
+        scale_a_data = [
+            [
+                Paragraph("<b>80-100</b>", cell_center),
+                Paragraph("<b>70-79</b>", cell_center),
+                Paragraph("<b>60-69</b>", cell_center),
+                Paragraph("<b>50-59</b>", cell_center),
+                Paragraph("<b>40-49</b>", cell_center),
+                Paragraph("<b>35-39</b>", cell_center),
+                Paragraph("<b>0-34</b>", cell_center),
+            ],
+            [
+                Paragraph("<b>A</b>", cell_center_bold),
+                Paragraph("<b>B</b>", cell_center_bold),
+                Paragraph("<b>C</b>", cell_center_bold),
+                Paragraph("<b>D</b>", cell_center_bold),
+                Paragraph("<b>E</b>", cell_center_bold),
+                Paragraph("<b>O</b>", cell_center_bold),
+                Paragraph("<b>F</b>", cell_center_bold),
+            ],
+            [
+                Paragraph("6 Pts", cell_center),
+                Paragraph("5 Pts", cell_center),
+                Paragraph("4 Pts", cell_center),
+                Paragraph("3 Pts", cell_center),
+                Paragraph("2 Pts", cell_center),
+                Paragraph("1 Pt", cell_center),
+                Paragraph("0 Pts", cell_center),
+            ],
+            [
+                Paragraph("EXCELLENT", cell_center),
+                Paragraph("VERY GOOD", cell_center),
+                Paragraph("GOOD", cell_center),
+                Paragraph("FAIR", cell_center),
+                Paragraph("PASS", cell_center),
+                Paragraph("SUB PASS", cell_center),
+                Paragraph("FAIL", cell_center),
+            ],
+        ]
+        scale_a_table = Table(scale_a_data, colWidths=[27 * mm, 27 * mm, 27 * mm, 27 * mm, 27 * mm, 27 * mm, 26 * mm])
+        scale_a_table.setStyle(
+            TableStyle([
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f4f8")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+            ])
+        )
+        el.append(scale_a_table)
+        el.append(Spacer(1, 1 * mm))
+        sub_note = Paragraph(
+            "<font size='7.5'><i>Subsidiary Subjects (General Paper / Sub-Maths / ICT): Score &ge; 50 = Credit (1 Pt) | 40 - 49 = Pass | 0 - 39 = F (Fail)</i></font>",
+            cell_style,
+        )
+        el.append(sub_note)
+        el.append(Spacer(1, 2.5 * mm))
 
         # A-Level Signatures & Remarks
         cls_rem = (comment.teacher_comment if comment else "") or ""

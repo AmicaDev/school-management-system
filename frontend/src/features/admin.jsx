@@ -65,6 +65,8 @@ const recycleConfigs = [
   { key: 'students', title: 'Students', cfg: R.students, endpoint: '/students/', params: { is_archived: true } },
   { key: 'parents', title: 'Parents', cfg: R.parents, endpoint: '/parents/', params: { is_archived: true } },
   { key: 'teachers', title: 'Teachers', cfg: R.teachers, endpoint: '/teachers/', params: { is_archived: true } },
+  { key: 'staff', title: 'Staff', cfg: R.staff, endpoint: '/staff/', params: { status: 'INACTIVE' } },
+  { key: 'users', title: 'User accounts', cfg: R.users, endpoint: '/auth/users/', params: { is_active: false } },
   { key: 'subjects', title: 'Subjects', cfg: R.subjects, endpoint: '/academics/subjects/', params: { is_archived: true } },
   { key: 'audit', title: 'Recent activity', cfg: R.audit, endpoint: '/audit/', params: {}, recycleBin: true },
 ]
@@ -133,8 +135,8 @@ export function ImportPanel({ kind, title, columns, note }) {
       {res && <div className="stack" style={{ marginTop: 12 }}>
         <div className="row"><span className="badge PASS">Valid {res.valid}</span><span className="badge FAIL">Invalid {res.invalid.length}</span><span className="badge WARNING">Duplicates {res.duplicates.length}</span>{!res.dry_run && <span className="badge info">Imported {res.created}</span>}</div>
         {res.invalid.map((i) => <div key={i.row} className="alert error">Row {i.row}: {i.error}</div>)}{res.duplicates.map((d) => <div key={d.row} className="alert warning">Row {d.row}: {d.name} already exists</div>)}
-        {res.credentials?.length > 0 && <div className="alert warning"><b>Temporary passwords — shown once. Copy them now and hand them out securely.</b>
-          <div className="pre">{res.credentials.map((c) => `${c.username}   ${c.temporary_password}`).join('\n')}</div></div>}</div>}
+        {res.credentials?.length > 0 && <div className="alert warning"><b>Temporary credentials — shown once. Copy them now and hand them out securely.</b>
+          <div className="pre">{res.credentials.map((c) => c.signin_code ? `${c.username}   Password: ${c.temporary_password}   Teacher code: ${c.signin_code}   (${c.full_name || ''}${c.subject ? ` · ${c.subject}` : ''})` : `${c.username}   ${c.temporary_password}`).join('\n')}</div></div>}</div>}
     </section>
   )
 }

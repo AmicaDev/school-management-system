@@ -1,63 +1,27 @@
 import re
 
 from django.contrib.auth import password_validation
-from rest_framework import serializers
+from django.contrib.auth.models import update_last_login
+from rest_framework import exceptions, serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
 from .passwords import check_password_strength
 
-# "ICT 220", "ict-220" and "ICT220" are the same code for a teacher.
-_CODE_STRIP = re.compile(r"[^a-z0-9]+")
-# Class part of a typed subject, e.g. "P1", "S.2", "Senior 3", "Primary 1".
-_CLASS_TOKEN = re.compile(r"\b((?:s\.?|senior\s*|p\.?|primary\s*)[1-6])\b", re.I)
-_DIGIT = re.compile(r"([1-9])")
 
+class UserSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(read_only=True)
 
-def _norm(value):
-    """Lower-case alphanumeric form of a value, so spacing and case never block a sign-in."""
-    return _CODE_STRIP.sub("", str(value or "").lower())
-
-
-def _initials(value):
-    """Initials of a subject name, so 'Information Communication Technology' also answers to 'ICT'."""
-    return "".join(part[0] for part in re.split(r"[^A-Za-z0-9]+", str(value or "")) if part)
-
-
-def _class_key(value):
-    """Class letters and number of a class name, e.g. 'Senior 2' -> ('S', '2')."""
-    text = str(value or "")
-    letter = next((c.upper() for c in text if c.isalpha()), "")
-    digit = _DIGIT.search(text)
-    return (letter if letter in ("S", "P") else "", digit.group(1) if digit else "")
-
-
-def _class_matches(hint, class_name):
-    """True when a class hint such as 'S2' points at the given class."""
-    letter, digit = hint
-    if not digit:
-        return True
-    c_letter, c_digit = _class_key(class_name)
-    if c_digit and c_digit != digit:
-        return False
-    if letter and c_letter and letter != c_letter:
-        return False
-    return True
-
-
-def _names_subject(name_key, subject):
-    """True when a typed name points at the subject, e.g. 'History', 'hist' or 'H' for History."""
-    if not name_key or subject is None:
-        return False
-    if _norm(subject.name) == name_key or _norm(subject.code) == name_key:
-        return True
-    if len(name_key) >= 2 and _initials(subject.name) == name_key:
-        return True
-    return len(name_key) >= 3 and name_key in _norm(subject.name)
+    class Meta:
+        model = User
+        fields = ["id", "username", "email", "first_name", "last_name", "full_name", "phone", "address", "photo", "role", "is_active",
+                  "created_at", "updated_at"]
+        read_only_fields = ["created_at", "updated_at"]
 
 
 class LoginSerializer(TokenObtainPairSerializer):
-    """Accepts usernames, parent student indexes, and teacher subject names with subject codes."""
+    """Accepts standard usernames and parent student index numbers."""
 
     def validate(self, attrs):
         ident = (attrs.get(self.username_field) or "").strip()
@@ -85,154 +49,80 @@ class LoginSerializer(TokenObtainPairSerializer):
                 data["user"] = UserSerializer(self.user).data
                 return data
 
-        # 3. Teacher sign-in with the subject they teach and its subject code
-        if pwd:
-            teacher = self._teacher_for(ident, pwd)
-            if teacher is not None:
-                self.user = teacher
-                refresh = self.get_token(teacher)
-                return {
-                    "refresh": str(refresh),
-                    "access": str(refresh.access_token),
-                    "user": UserSerializer(teacher).data,
-                }
-
         data = super().validate(attrs)
         data["user"] = UserSerializer(self.user).data
         return data
 
-    @staticmethod
-    def _is_signable_teacher(user):
-        """True when a teacher account may still sign in: active and not archived."""
-        if not user.is_active or user.role != User.Role.TEACHER:
-            return False
-        profile = getattr(user, "teacher_profile", None)
-        return not (profile and profile.is_archived)
 
-    @staticmethod
-    def _bindings():
-        """Every teacher/subject pairing the school recorded, with the code the administrator set."""
-        from apps.academics.models import TeachingAssignment
-        from apps.timetable.models import TimetableEntry
+class TeacherLoginSerializer(serializers.Serializer):
+    """
+    Teacher login channel using teacher identifier (username, email, or full name)
+    and admin-issued sign-in code.
+    """
+    identifier = serializers.CharField(required=False, allow_blank=True)
+    username = serializers.CharField(required=False, allow_blank=True)
+    code = serializers.CharField(required=False, allow_blank=True)
+    password = serializers.CharField(required=False, allow_blank=True)
 
-        rows = []
-        sources = (
-            (TeachingAssignment.objects.filter(teacher__role=User.Role.TEACHER, teacher__is_active=True),
-             lambda row: row.teacher_subject_code),
-            (TimetableEntry.objects.filter(teacher__role=User.Role.TEACHER, teacher__is_active=True),
-             lambda row: ""),
-        )
-        for queryset, code_of in sources:
-            for row in queryset.select_related("teacher", "teacher__teacher_profile", "subject", "stream__school_class"):
-                if not LoginSerializer._is_signable_teacher(row.teacher):
-                    continue
-                rows.append({
-                    "teacher": row.teacher,
-                    "subject": row.subject,
-                    "code": code_of(row),
-                    "class": row.stream.school_class.name if row.stream_id else "",
-                })
-        return rows
+    def validate(self, attrs):
+        ident = (attrs.get("identifier") or attrs.get("username") or "").strip()
+        code = (attrs.get("code") or attrs.get("password") or "").strip()
 
-    @staticmethod
-    def _subject_for_code(code):
-        """The subject whose own code matches, ignoring case and separators."""
-        from apps.academics.models import Subject
+        if not ident or not code:
+            raise exceptions.AuthenticationFailed("Incorrect username or password.")
 
-        for subject in Subject.objects.all():
-            if _norm(subject.code) == code:
-                return subject
-        return None
+        # 1. Exact username match among teachers (case-insensitive)
+        candidates = list(User.objects.filter(role=User.Role.TEACHER, username__iexact=ident))
 
-    @staticmethod
-    def _rank(binding, name_key):
-        """How well a typed name matches a teacher's subject (3 = the teacher's own username)."""
-        teacher, subject, teacher_code = binding["teacher"], binding["subject"], binding["code"]
-        if not name_key:
-            return 1
-        if _norm(teacher.username) == name_key:
-            return 3  # the teacher signed in with their own username
-        if _norm(subject.name) == name_key or _norm(subject.code) == name_key:
-            return 2  # exact subject name or subject code
-        if _norm(teacher_code) == name_key:
-            return 2  # the code they were given for this assignment
-        if len(name_key) >= 2 and _initials(subject.name) == name_key:
-            return 2  # initials, e.g. "ICT"
-        if len(name_key) >= 3 and name_key in _norm(subject.name):
-            return 1  # partial subject name, e.g. "Math" for "Mathematics"
-        return 0
+        # 2. Fallback: exact email match among teachers (only if non-empty and unique)
+        if not candidates:
+            email_matches = list(User.objects.filter(role=User.Role.TEACHER, email__iexact=ident).exclude(email=""))
+            if len(email_matches) > 1:
+                raise serializers.ValidationError("More than one teacher matches that email address — use the username the administrator gave you.")
+            elif len(email_matches) == 1:
+                candidates = email_matches
 
-    @staticmethod
-    def _signin_error(ident, name_key, subject):
-        """Explain what a teacher sign-in is missing, instead of a bare 'wrong credentials'."""
-        if subject is None or not _names_subject(name_key, subject):
-            return None
-        account = User.objects.filter(role=User.Role.TEACHER, username__iexact=ident.strip()).first()
-        if account is not None and not LoginSerializer._is_signable_teacher(account):
-            return None  # an archived or inactive account keeps the generic rejection
-        detail = (f"No teacher is signed in with the subject code '{subject.code}' yet. "
-                  f"Ask the administrator to assign '{subject.name}' to a teacher.")
-        return serializers.ValidationError({"username": detail})
+        # 3. Fallback: full name matching
+        if not candidates:
+            norm_ident = re.sub(r"[^a-zA-Z0-9]+", "", ident).lower()
+            if norm_ident:
+                name_matches = []
+                for teacher in User.objects.filter(role=User.Role.TEACHER):
+                    f_norm = re.sub(r"[^a-zA-Z0-9]+", "", teacher.first_name or "").lower()
+                    l_norm = re.sub(r"[^a-zA-Z0-9]+", "", teacher.last_name or "").lower()
+                    # forms: first last, last first, firstlast, firstlast (case/space/punct insensitive)
+                    if norm_ident in (f"{f_norm}{l_norm}", f"{l_norm}{f_norm}"):
+                        name_matches.append(teacher)
+                if len(name_matches) > 1:
+                    raise serializers.ValidationError("More than one teacher matches that name — use the username the administrator gave you.")
+                elif len(name_matches) == 1:
+                    candidates = name_matches
 
-    @staticmethod
-    def _teacher_for(ident, pwd):
-        """Resolve the teacher signing in with a subject name and that subject's code."""
-        code = _norm(pwd)
-        if not code or not ident.strip():
-            return None
+        if not candidates:
+            raise exceptions.AuthenticationFailed("Incorrect username or password.")
 
-        hint = _CLASS_TOKEN.search(ident)
-        subject_part = _CLASS_TOKEN.sub(" ", ident).strip(" -_().") if hint else ident
-        name_key = _norm(subject_part)
-        hint_key = _class_key(hint.group(1)) if hint else ("", "")
+        teacher = candidates[0]
 
-        bindings = LoginSerializer._bindings()
-        subject = LoginSerializer._subject_for_code(code)
+        # Account state check: reject unless is_active=True, role == TEACHER, profile exists and not archived
+        if not teacher.is_active or teacher.role != User.Role.TEACHER:
+            raise exceptions.AuthenticationFailed("Incorrect username or password.")
 
-        # The code assigned to a teacher is more precise than the code of the subject itself.
-        pool = [b for b in bindings if _norm(b["code"]) == code]
-        if not pool and subject is not None:
-            pool = [b for b in bindings if b["subject"].pk == subject.pk]
-        if subject is not None and _names_subject(name_key, subject):
-            # The account may be named after the subject it teaches, e.g. 'HISTORY' for History.
-            named = User.objects.filter(role=User.Role.TEACHER, is_active=True, username__iexact=subject_part.strip())
-            for teacher in named:
-                if LoginSerializer._is_signable_teacher(teacher):
-                    pool.append({"teacher": teacher, "subject": subject, "code": code, "class": ""})
-        if not pool:
-            error = LoginSerializer._signin_error(ident, name_key, subject)
-            if error is not None:
-                raise error
-            return None
+        profile = getattr(teacher, "teacher_profile", None)
+        if profile is None or profile.is_archived:
+            raise exceptions.AuthenticationFailed("Incorrect username or password.")
 
-        if hint_key[1]:
-            narrowed = [b for b in pool if _class_matches(hint_key, b["class"])]
-            if narrowed:
-                pool = narrowed
+        # Credential check using constant-time check_password against stored hash
+        if not profile.signin_code_hash or not profile.check_signin_code(code):
+            raise exceptions.AuthenticationFailed("Incorrect username or password.")
 
-        ranked = [(LoginSerializer._rank(b, name_key), b) for b in pool]
-        best = max((rank for rank, _ in ranked), default=0)
-        if best:
-            # Keep only the best matches; an unmatched name falls back to the code alone.
-            pool = [b for rank, b in ranked if rank == best]
+        refresh = RefreshToken.for_user(teacher)
+        update_last_login(None, teacher)
 
-        teachers = {b["teacher"].pk for b in pool}
-        if len(teachers) == 1:
-            return User.objects.get(pk=teachers.pop())
-        if len(teachers) > 1:
-            raise serializers.ValidationError({
-                "username": "More than one teacher is assigned this subject. Add the class to the username, for example 'English S2'."
-            })
-        return None
-
-
-class UserSerializer(serializers.ModelSerializer):
-    full_name = serializers.CharField(read_only=True)
-
-    class Meta:
-        model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "full_name", "phone", "address", "photo", "role", "is_active",
-                  "created_at", "updated_at"]
+        return {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "user": UserSerializer(teacher).data,
+        }
         read_only_fields = ["id", "created_at", "updated_at", "role", "is_active"]
 
 

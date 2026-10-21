@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { api, errorMessage, items, uuid } from '../services/api'
 import { useFetch } from '../hooks/useFetch'
 import { useAuth } from '../contexts/AuthContext'
@@ -17,12 +17,22 @@ export function useMyStreams() {
   const { user } = useAuth()
   const a = useFetch('/academics/assignments/', { page_size: 200 })
   const s = useFetch('/academics/streams/')
+  const subFetch = useFetch('/academics/subjects/', { page_size: 200 })
   const assignments = items(a.data)
+  const allSubjects = items(subFetch.data)
   const streams = useMemo(() => {
+    if (user?.role === 'ADMIN') return items(s.data)
     const ids = new Set(assignments.map((x) => x.stream))
     return items(s.data).filter((x) => ids.has(x.id) || x.class_teacher === user.id)
-  }, [a.data, s.data, user.id]) // eslint-disable-line
-  return { assignments, streams, loading: a.loading || s.loading, error: a.error || s.error, reload: () => { a.reload(); s.reload() } }
+  }, [a.data, s.data, user?.id, user?.role])
+  return {
+    assignments,
+    streams,
+    allSubjects,
+    loading: a.loading || s.loading || subFetch.loading,
+    error: a.error || s.error || subFetch.error,
+    reload: () => { a.reload(); s.reload(); subFetch.reload() }
+  }
 }
 
 export function TeacherDashboard() {
@@ -137,14 +147,116 @@ export function Attendance() {
   )
 }
 
+const gradePreview = (totStr) => {
+  if (!totStr || totStr === '—') return '—'
+  const n = Number(String(totStr).replace('%', ''))
+  if (isNaN(n)) return '—'
+  if (n >= 80) return 'A'
+  if (n >= 70) return 'B'
+  if (n >= 60) return 'C'
+  if (n >= 50) return 'D'
+  return 'E'
+}
+
+const remarkPreview = (g) => {
+  return { A: 'EXCELLENT', B: 'VERY GOOD', C: 'GOOD', D: 'FAIR', E: 'POOR' }[g] || '—'
+}
+
 export function Marks({ only }) {
+  const location = useLocation()
   const my = useMyStreams()
+  const { user } = useAuth()
   const { terms, active } = useTerms()
   const { online, refreshCount, sync } = useApp()
+
+  const years = useMemo(() => {
+    const map = new Map()
+    terms.forEach((t) => {
+      if (t.year && !map.has(t.year)) {
+        map.set(t.year, { id: t.year, name: t.year_name || String(t.year) })
+      }
+    })
+    return [...map.values()]
+  }, [terms])
+
+  const [yearId, setYearId] = useState(null)
+  const [termId, setTermId] = useState(null)
+
+  useEffect(() => {
+    if (active && !termId) {
+      setTermId(active.id)
+      setYearId(active.year)
+    }
+  }, [active, termId])
+
+  const availableTerms = useMemo(() => {
+    if (!yearId) return terms
+    return terms.filter((t) => t.year === yearId)
+  }, [terms, yearId])
+
+  const classes = useMemo(() => {
+    const map = new Map()
+    my.streams.forEach((s) => {
+      const cid = s.school_class
+      if (cid && !map.has(cid)) {
+        map.set(cid, { id: cid, name: s.class_name || `Class ${cid}` })
+      }
+    })
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+  }, [my.streams])
+
+  const [selectedClass, setSelectedClass] = useState('')
   const [stream, setStream] = useState('')
   const [subject, setSubject] = useState('')
   const [paper, setPaper] = useState('')
-  const [termId, setTermId] = useState(null)
+  const [examTypeFilter, setExamTypeFilter] = useState(only ? only[0] : '')
+
+  const availableStreams = useMemo(() => {
+    if (!selectedClass) return []
+    return my.streams.filter((s) => String(s.school_class) === String(selectedClass))
+  }, [my.streams, selectedClass])
+
+  // Pre-fill from navigation state if available
+  useEffect(() => {
+    if (location.state?.stream) {
+      const st = my.streams.find((s) => String(s.id) === String(location.state.stream))
+      if (st) {
+        setSelectedClass(String(st.school_class))
+        setStream(String(st.id))
+        if (location.state.subject) setSubject(String(location.state.subject))
+        if (location.state.paper) setPaper(String(location.state.paper))
+      }
+    }
+  }, [location.state, my.streams])
+
+  // Auto-select stream if only 1 exists for the selected class
+  useEffect(() => {
+    if (selectedClass && availableStreams.length === 1 && !stream) {
+      setStream(String(availableStreams[0].id))
+    }
+  }, [selectedClass, availableStreams, stream])
+
+  const subjects = useMemo(() => {
+    const assigned = [...new Map(my.assignments.filter((a) => String(a.stream) === String(stream)).map((a) => [a.subject, a])).values()]
+    if (assigned.length || user?.role !== 'ADMIN') return assigned
+    return (my.allSubjects || []).map((sub) => ({ id: sub.id, subject: sub.id, subject_name: sub.name, paper_number: 1 }))
+  }, [my.assignments, my.allSubjects, stream, user?.role])
+
+  const papers = useMemo(() => {
+    const assigned = my.assignments.filter((a) => String(a.stream) === String(stream) && String(a.subject) === String(subject))
+    if (assigned.length) {
+      return [...new Set(assigned.map((a) => a.paper_number))].sort((a, b) => a - b)
+    }
+    const foundSub = (my.allSubjects || []).find((s) => String(s.id) === String(subject))
+    const num = foundSub?.number_of_papers || 1
+    return Array.from({ length: num }, (_, i) => i + 1)
+  }, [my.assignments, my.allSubjects, stream, subject])
+
+  useEffect(() => {
+    if (papers.length && !papers.some((n) => String(n) === paper)) setPaper(String(papers[0]))
+    if (!papers.length && paper) setPaper('')
+  }, [papers.join(','), stream, subject]) // eslint-disable-line
+
   const [grid, setGrid] = useState(null)
   const [edits, setEdits] = useState({})
   const [maxes, setMaxes] = useState({})
@@ -152,39 +264,58 @@ export function Marks({ only }) {
   const [save, setSave] = useState({ state: 'idle', msg: '' })
   const [draftState, setDraftState] = useState('')
   const draftKey = `marks:${stream}:${subject}:${paper}:${termId}`
-  const subjects = [...new Map(my.assignments.filter((a) => String(a.stream) === String(stream)).map((a) => [a.subject, a])).values()]
-  const papers = [...new Set(my.assignments.filter((a) => String(a.stream) === String(stream) && String(a.subject) === String(subject)).map((a) => a.paper_number))].sort((a, b) => a - b)
-  useEffect(() => {
-    if (papers.length && !papers.some((n) => String(n) === paper)) setPaper(String(papers[0]))
-    if (!papers.length && paper) setPaper('')
-  }, [papers.join(','), stream, subject]) // eslint-disable-line
-  useEffect(() => { if (active && !termId) setTermId(active.id) }, [active, termId])
 
   const fetchGrid = useCallback(async () => {
     if (!stream || !subject || !paper || !termId) return setGrid(null)
     setLoad({ loading: true, error: '' }); setSave({ state: 'idle', msg: '' })
     let data
-    try { data = (await api.get('/results/grid/', { params: { stream, subject, paper_number: paper, term: termId } })).data; dbPut('cache', { key: `grid:${draftKey}`, value: data }).catch(() => {}) }
-    catch (e) { if (!e.response) data = (await dbGet('cache', `grid:${draftKey}`).catch(() => null))?.value; if (!data) return setLoad({ loading: false, error: errorMessage(e) }) }
+    try {
+      data = (await api.get('/results/grid/', { params: { stream, subject, paper_number: paper, term: termId } })).data
+      dbPut('cache', { key: `grid:${draftKey}`, value: data }).catch(() => {})
+    } catch (e) {
+      if (!e.response) data = (await dbGet('cache', `grid:${draftKey}`).catch(() => null))?.value
+      if (!data) return setLoad({ loading: false, error: errorMessage(e) })
+    }
     const m = {}
-    data.exam_types.forEach((t) => { const withData = data.rows.find((r) => r.cells[t.code]); m[t.code] = String(withData ? withData.cells[t.code].max : t.default_max) })
+    data.exam_types.forEach((t) => {
+      const withData = data.rows.find((r) => r.cells[t.code])
+      let defMax = t.default_max
+      if (t.code === 'BOT') defMax = 20
+      else if (t.code === 'MID') defMax = 20
+      else if (t.code === 'FINAL' || t.code === 'EOT') defMax = 80
+      m[t.code] = String(withData ? withData.cells[t.code].max : defMax)
+    })
     const draft = (await dbGet('drafts', draftKey).catch(() => null))?.value
-    setGrid(data); setMaxes({ ...m, ...(draft?.maxes || {}) }); setEdits(draft?.edits || {})
+    setGrid(data)
+    setMaxes({ ...m, ...(draft?.maxes || {}) })
+    setEdits(draft?.edits || {})
     if (draft && Object.keys(draft.edits || {}).length) setDraftState('Restored your unsaved entries from this device.')
     setLoad({ loading: false, error: '' })
-  }, [stream, subject, paper, termId]) // eslint-disable-line
+  }, [stream, subject, paper, termId, draftKey])
+
   useEffect(() => { fetchGrid() }, [fetchGrid])
 
-  useEffect(() => { // local auto-save
+  useEffect(() => {
     if (!grid) return undefined
-    const t = setTimeout(() => { dbPut('drafts', { key: draftKey, value: { edits, maxes } }).then(() => setDraftState(Object.keys(edits).length ? 'Draft saved on this device' : '')).catch(() => {}) }, 600)
+    const t = setTimeout(() => {
+      dbPut('drafts', { key: draftKey, value: { edits, maxes } })
+        .then(() => setDraftState(Object.keys(edits).length ? 'Draft saved on this device' : ''))
+        .catch(() => {})
+    }, 600)
     return () => clearTimeout(t)
-  }, [edits, maxes]) // eslint-disable-line
+  }, [edits, maxes, draftKey, grid])
 
-  const types = (grid?.exam_types || []).filter((t) => !only || only.includes(t.code))
+  const allExamTypes = grid?.exam_types || []
+  const types = allExamTypes.filter((t) => {
+    if (only && !only.includes(t.code)) return false
+    if (examTypeFilter && t.code !== examTypeFilter) return false
+    return true
+  })
+
   const cellVal = (r, code) => edits[`${r.student}:${code}`] ?? (r.cells[code] ? String(r.cells[code].score) : '')
   const invalid = (r, code) => {
-    const v = cellVal(r, code); if (v === '') return ''
+    const v = cellVal(r, code)
+    if (v === '') return ''
     const n = Number(v), mx = Number(maxes[code])
     if (Number.isNaN(n) || n < 0) return 'Enter a number of 0 or more'
     if (n > mx) return `Cannot exceed ${mx}`
@@ -192,29 +323,58 @@ export function Marks({ only }) {
   }
   const errorCount = grid ? grid.rows.reduce((a, r) => a + types.filter((t) => invalid(r, t.code)).length, 0) : 0
   const maxErr = (code) => !(Number(maxes[code]) > 0)
+
   const nav = (e, r, c) => {
     const d = { ArrowDown: [1, 0], Enter: [1, 0], ArrowUp: [-1, 0] }[e.key]
     if (!d) return
-    e.preventDefault(); document.querySelector(`[data-cell="${r + d[0]}:${c}"]`)?.focus()
+    e.preventDefault()
+    document.querySelector(`[data-cell="${r + d[0]}:${c}"]`)?.focus()
   }
 
   const doSave = async () => {
     if (errorCount || types.some((t) => maxErr(t.code))) return setSave({ state: 'error', msg: 'Fix the highlighted marks before saving.' })
-    const batches = types.map((t) => ({ t, entries: grid.rows.filter((r) => edits[`${r.student}:${t.code}`] !== undefined && edits[`${r.student}:${t.code}`] !== '').map((r) => ({ student: r.student, score: edits[`${r.student}:${t.code}`] })) })).filter((b) => b.entries.length)
+    const batches = types.map((t) => ({
+      t,
+      entries: grid.rows
+        .filter((r) => edits[`${r.student}:${t.code}`] !== undefined && edits[`${r.student}:${t.code}`] !== '')
+        .map((r) => ({ student: r.student, score: edits[`${r.student}:${t.code}`] }))
+    })).filter((b) => b.entries.length)
     if (!batches.length) return setSave({ state: 'error', msg: 'Nothing new to save.' })
     setSave({ state: 'saving', msg: '' })
     let queued = false
     try {
       for (const b of batches) {
-        const payload = { client_txn_id: uuid(), stream: Number(stream), subject: Number(subject), paper_number: Number(paper),
-          term: termId, exam_type: b.t.id, title: '', max_score: maxes[b.t.code], entries: b.entries }
+        const payload = {
+          client_txn_id: uuid(),
+          stream: Number(stream),
+          subject: Number(subject),
+          paper_number: Number(paper),
+          term: termId,
+          exam_type: b.t.id,
+          title: '',
+          max_score: maxes[b.t.code],
+          entries: b.entries
+        }
         try {
           if (!online) throw Object.assign(new Error('offline'), {})
           await api.post('/results/assessments/bulk/', payload)
-        } catch (e) { if (e.response) throw e; await enqueue('marks', '/results/assessments/bulk/', payload, b.t.name); queued = true }
+        } catch (e) {
+          if (e.response) throw e
+          await enqueue('marks', '/results/assessments/bulk/', payload, b.t.name)
+          queued = true
+        }
       }
       await dbDel('drafts', draftKey).catch(() => {})
-      if (queued) { refreshCount(); sync(); setSave({ state: 'queued', msg: 'Saved on this device — will sync automatically' }) } else { setEdits({}); setDraftState(''); await fetchGrid(); setSave({ state: 'saved', msg: 'Marks saved. Totals and grades are calculated by the server.' }) }
+      if (queued) {
+        refreshCount()
+        sync()
+        setSave({ state: 'queued', msg: 'Saved on this device — will sync automatically' })
+      } else {
+        setEdits({})
+        setDraftState('')
+        await fetchGrid()
+        setSave({ state: 'saved', msg: 'Marks saved. Totals and grades are calculated by the server.' })
+      }
     } catch (e) {
       const bad = e.response?.data?.errors
       setSave({ state: 'error', msg: bad ? `${Object.keys(bad).length} mark(s) rejected: ${Object.values(bad)[0]}` : errorMessage(e) })
@@ -225,30 +385,268 @@ export function Marks({ only }) {
     <div className="stack">
       <section className="panel">
         <div className="panel-head"><h2>{only ? 'Assignment marks' : 'Enter marks'}</h2></div>
-        <div className="row">
-          <select className="input" style={{ width: 'auto' }} value={stream} onChange={(e) => { setStream(e.target.value); setSubject(''); setPaper('') }} aria-label="Class and stream"><option value="">Class & stream</option>{my.streams.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
-          <select className="input" style={{ width: 'auto' }} value={subject} onChange={(e) => { setSubject(e.target.value); setPaper('') }} aria-label="Subject" disabled={!stream}><option value="">Subject</option>{subjects.map((a) => <option key={a.subject} value={a.subject}>{a.subject_name}</option>)}</select>
-          <select className="input" style={{ width: 'auto' }} value={paper} onChange={(e) => setPaper(e.target.value)} aria-label="Paper" disabled={!subject}><option value="">Paper</option>{papers.map((n) => <option key={n} value={n}>Paper {n}</option>)}</select>
-          <TermSelect terms={terms} value={termId} onChange={setTermId} />
+        <div className="row wrap" style={{ gap: 10 }}>
+          {/* Academic Year */}
+          <select
+            className="input"
+            style={{ width: 'auto' }}
+            value={yearId || ''}
+            onChange={(e) => {
+              const yId = Number(e.target.value)
+              setYearId(yId)
+              const tInYear = terms.filter((t) => t.year === yId)
+              if (tInYear.length && !tInYear.some((t) => t.id === termId)) {
+                setTermId(tInYear.find((t) => t.is_active)?.id || tInYear[0].id)
+              }
+            }}
+            aria-label="Academic Year"
+          >
+            <option value="">Academic Year</option>
+            {years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}
+          </select>
+
+          {/* Academic & Term */}
+          <select
+            className="input"
+            style={{ width: 'auto' }}
+            value={termId || ''}
+            onChange={(e) => setTermId(Number(e.target.value))}
+            aria-label="Academic & Term"
+          >
+            <option value="">Term</option>
+            {availableTerms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+
+          {/* Select class */}
+          <select
+            className="input"
+            style={{ width: 'auto' }}
+            value={selectedClass}
+            onChange={(e) => {
+              const cId = e.target.value
+              setSelectedClass(cId)
+              const streamsInClass = my.streams.filter((s) => String(s.school_class) === String(cId))
+              if (streamsInClass.length === 1) {
+                setStream(String(streamsInClass[0].id))
+              } else {
+                setStream('')
+              }
+              setSubject('')
+              setPaper('')
+            }}
+            aria-label="Select class"
+          >
+            <option value="">Select class</option>
+            {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+
+          {/* Stream */}
+          <select
+            className="input"
+            style={{ width: 'auto' }}
+            value={stream}
+            onChange={(e) => { setStream(e.target.value); setSubject(''); setPaper('') }}
+            aria-label="Stream"
+            disabled={!selectedClass}
+          >
+            <option value="">Stream</option>
+            {availableStreams.map((s) => <option key={s.id} value={s.id}>{s.name || s.label}</option>)}
+          </select>
+
+          {/* Subject */}
+          <select
+            className="input"
+            style={{ width: 'auto' }}
+            value={subject}
+            onChange={(e) => { setSubject(e.target.value); setPaper('') }}
+            aria-label="Subject"
+            disabled={!stream}
+          >
+            <option value="">Subject</option>
+            {subjects.map((a) => <option key={a.subject} value={a.subject}>{a.subject_name}</option>)}
+          </select>
+
+          {/* Papers */}
+          <select
+            className="input"
+            style={{ width: 'auto' }}
+            value={paper}
+            onChange={(e) => setPaper(e.target.value)}
+            aria-label="Papers"
+            disabled={!subject}
+          >
+            <option value="">Paper</option>
+            {papers.map((n) => <option key={n} value={n}>Paper {n}</option>)}
+          </select>
+
+          {/* Assignment / Examination type */}
+          <select
+            className="input"
+            style={{ width: 'auto' }}
+            value={examTypeFilter}
+            onChange={(e) => setExamTypeFilter(e.target.value)}
+            aria-label="Assignment / Examination type"
+            disabled={Boolean(only)}
+          >
+            <option value="">All Examination Types</option>
+            {allExamTypes.map((t) => <option key={t.code} value={t.code}>{t.name} ({t.code})</option>)}
+          </select>
         </div>
       </section>
-      {!stream || !subject || !paper ? <Empty title="Choose a class, subject and paper" /> : load.loading ? <Skeleton rows={6} /> : load.error ? <ErrorState message={load.error} onRetry={fetchGrid} /> : !grid?.rows.length ? <Empty title="No students in this class" /> : (
+
+      {!stream || !subject || !paper ? (
+        <Empty title="Choose class, stream, subject and paper to view students" />
+      ) : load.loading ? (
+        <Skeleton rows={6} />
+      ) : load.error ? (
+        <ErrorState message={load.error} onRetry={fetchGrid} />
+      ) : !grid?.rows.length ? (
+        <Empty title="No registered students in this class" />
+      ) : (
         <section className="panel sheet">
           <div className="row spread" style={{ marginBottom: 12 }}>
-            <span className="muted" aria-live="polite">{draftState}{errorCount > 0 && ` · ${errorCount} invalid`}</span>
-            <button className="btn primary lg" onClick={doSave} disabled={save.state === 'saving'}>{save.state === 'saving' ? 'Saving…' : 'Save marks'}</button>
+            <span className="muted" aria-live="polite">
+              {draftState}{errorCount > 0 && ` · ${errorCount} invalid`}
+            </span>
+            <button className="btn primary lg" onClick={doSave} disabled={save.state === 'saving'}>
+              {save.state === 'saving' ? 'Saving…' : 'Save marks'}
+            </button>
           </div>
           {save.state !== 'idle' && <Alert kind={save.state === 'error' ? 'error' : save.state === 'queued' ? 'info' : 'success'}>{save.msg}</Alert>}
-          <div className="table-wrap"><table className="table">
-            <thead><tr><th>Student</th>{types.map((t) => <th key={t.code}>{t.name}<br /><small className="muted">out of <input className={`input cell${maxErr(t.code) ? ' invalid' : ''}`} style={{ width: 64, minHeight: 28 }} inputMode="decimal" value={maxes[t.code] ?? ''} onChange={(e) => setMaxes({ ...maxes, [t.code]: e.target.value })} aria-label={`${t.name} maximum mark`} /></small></th>)}<th>Total %</th><th>Grade</th><th>Remark</th></tr></thead>
-            <tbody>{grid.rows.map((r, ri) => (
-              <tr key={r.student}><td><b>{r.name}</b><br /><small className="muted">{r.index_no}</small></td>
-                {types.map((t, ci) => { const err = invalid(r, t.code); return <td key={t.code}><input data-cell={`${ri}:${ci}`} className={`input cell${err ? ' invalid' : ''}`} inputMode="decimal" value={cellVal(r, t.code)} title={err} aria-invalid={!!err} aria-label={`${r.name} ${t.name}`}
-                  onChange={(e) => setEdits({ ...edits, [`${r.student}:${t.code}`]: e.target.value })} onKeyDown={(e) => nav(e, ri, ci)} /></td> })}
-                <td className="ro">{r.total ?? '—'}</td><td className="ro">{r.grade || '—'}</td><td className="ro">{r.remark || '—'}</td></tr>))}</tbody>
-          </table></div>
-          <p className="muted">Enter or ↓ moves down a column. Entries are kept on this device while you type. Totals, grades and remarks come from the server after saving.</p>
-        </section>)}
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th style={{ minWidth: 160 }}>Student</th>
+                  {types.map((t) => {
+                    const isBot = t.code === 'BOT'
+                    const isMid = t.code === 'MID'
+                    const isFinal = t.code === 'FINAL' || t.code === 'EOT'
+                    const defaultOut = isBot ? 20 : isMid ? 20 : isFinal ? 80 : (t.default_max || 100)
+                    return (
+                      <Fragment key={t.code}>
+                        <th>
+                          {t.name}
+                          <br />
+                          <small className="muted">
+                            out of{' '}
+                            <input
+                              className={`input cell${maxErr(t.code) ? ' invalid' : ''}`}
+                              style={{ width: 56, minHeight: 26, padding: '2px 4px', textAlign: 'center' }}
+                              inputMode="decimal"
+                              value={maxes[t.code] ?? defaultOut}
+                              onChange={(e) => setMaxes({ ...maxes, [t.code]: e.target.value })}
+                              aria-label={`${t.name} maximum mark`}
+                            />
+                          </small>
+                        </th>
+                        {isBot && (
+                          <th style={{ minWidth: 70, textAlign: 'center' }}>
+                            C1
+                            <br />
+                            <small className="muted">(out of 3.0)</small>
+                          </th>
+                        )}
+                        {isMid && (
+                          <th style={{ minWidth: 70, textAlign: 'center' }}>
+                            C2
+                            <br />
+                            <small className="muted">(out of 3.0)</small>
+                          </th>
+                        )}
+                      </Fragment>
+                    )
+                  })}
+                  <th>Total %</th>
+                  <th>Grade</th>
+                  <th>Remark</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grid.rows.map((r, ri) => {
+                  const botVal = cellVal(r, 'BOT')
+                  const midVal = cellVal(r, 'MID')
+                  const finalVal = cellVal(r, 'FINAL') || cellVal(r, 'EOT')
+                  const botMax = Number(maxes['BOT']) || 20
+                  const midMax = Number(maxes['MID']) || 20
+
+                  // C1 dynamically calculated as ((marks obtained / 20) * 3)
+                  const c1Display = botVal !== '' && !isNaN(Number(botVal))
+                    ? ((Number(botVal) / botMax) * 3).toFixed(1)
+                    : (r.c1 != null ? Number(r.c1).toFixed(1) : '—')
+
+                  // Mid-Term marks out of 20 converted to C2
+                  const c2Display = midVal !== '' && !isNaN(Number(midVal))
+                    ? ((Number(midVal) / midMax) * 3).toFixed(1)
+                    : (r.c2 != null ? Number(r.c2).toFixed(1) : '—')
+
+                  // Total: BOT contributes 20 of 80 marks for final year to give total of 100
+                  // Mid-Term is NOT calculated in the final term results
+                  let displayTotal = r.total != null ? `${r.total}%` : '—'
+                  if (botVal !== '' && finalVal !== '' && !isNaN(Number(botVal)) && !isNaN(Number(finalVal))) {
+                    displayTotal = `${(Number(botVal) + Number(finalVal)).toFixed(1)}%`
+                  } else if (botVal !== '' && !isNaN(Number(botVal)) && finalVal === '') {
+                    displayTotal = `${Number(botVal).toFixed(1)}%`
+                  } else if (finalVal !== '' && !isNaN(Number(finalVal)) && botVal === '') {
+                    displayTotal = `${Number(finalVal).toFixed(1)}%`
+                  }
+
+                  const gPreview = gradePreview(displayTotal)
+                  const remPreview = remarkPreview(gPreview)
+
+                  return (
+                    <tr key={r.student}>
+                      <td>
+                        <b>{r.name}</b>
+                        <br />
+                        <small className="muted">{r.index_no}</small>
+                      </td>
+                      {types.map((t, ci) => {
+                        const err = invalid(r, t.code)
+                        const isBot = t.code === 'BOT'
+                        const isMid = t.code === 'MID'
+                        return (
+                          <Fragment key={t.code}>
+                            <td>
+                              <input
+                                data-cell={`${ri}:${ci}`}
+                                className={`input cell${err ? ' invalid' : ''}`}
+                                inputMode="decimal"
+                                value={cellVal(r, t.code)}
+                                title={err}
+                                aria-invalid={!!err}
+                                aria-label={`${r.name} ${t.name}`}
+                                onChange={(e) => setEdits({ ...edits, [`${r.student}:${t.code}`]: e.target.value })}
+                                onKeyDown={(e) => nav(e, ri, ci)}
+                              />
+                            </td>
+                            {isBot && (
+                              <td className="ro" style={{ textAlign: 'center', fontWeight: 600, color: 'var(--primary)' }}>
+                                {c1Display}
+                              </td>
+                            )}
+                            {isMid && (
+                              <td className="ro" style={{ textAlign: 'center', fontWeight: 600, color: 'var(--primary)' }}>
+                                {c2Display}
+                              </td>
+                            )}
+                          </Fragment>
+                        )
+                      })}
+                      <td className="ro"><b>{displayTotal}</b></td>
+                      <td className="ro"><b>{gPreview}</b></td>
+                      <td className="ro">{remPreview}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted">
+            Enter or ↓ moves down a column. Entries are kept on this device while you type. BOT is entered out of 20 and converted to C1. Mid-Term is entered out of 20 and converted to C2 (not added to final term results). End of Term is entered out of 80. BOT + End of Term gives final mark out of 100.
+          </p>
+        </section>
+      )}
     </div>
   )
 }

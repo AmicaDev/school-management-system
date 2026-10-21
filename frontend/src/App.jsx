@@ -49,7 +49,7 @@ const StudentsPage = () => {
       ) : (
         <div className="stack" style={{ marginTop: 16 }}>
           <ResourcePage cfg={{ ...R.students, rowActions: (r) => <Link className="btn sm" to={`/admin/students/${r.id}`}>Profile</Link> }} />
-          <A.ImportPanel kind="students" title="Bulk import students" columns={['first_name', 'last_name', 'gender', 'date_of_birth', 'class', 'stream', 'index_no', 'candidate_no']} note="gender is M or F; date format YYYY-MM-DD. Index numbers are generated if blank; candidate numbers are optional." />
+          <A.ImportPanel kind="students" title="Bulk import students" columns={['name', 'gender', 'class', 'stream', 'date_of_birth', 'index_no', 'candidate_no']} note="name (or first_name, last_name), gender (M/F), and class are required. Other fields are optional and can be added when editing student." />
         </div>
       )}
     </div>
@@ -58,7 +58,7 @@ const StudentsPage = () => {
 const TeachersPage = () => (
   <div className="stack">
     <ResourcePage cfg={R.teachers} />
-    <A.ImportPanel kind="teachers" title="Bulk import teachers" columns={['username', 'first_name', 'last_name', 'gender', 'email', 'phone', 'password']} note="Leave password blank to generate a temporary one." />
+    <A.ImportPanel kind="teachers" title="Bulk import teachers" columns={['name', 'gender', 'subject', 'username', 'email', 'phone', 'password', 'signin_code']} note="name (or first_name, last_name), gender (M/F), and subject are required. Username, password, and sign-in code are auto-generated if blank." />
   </div>
 )
 const ParentsPage = () => (

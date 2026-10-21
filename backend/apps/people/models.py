@@ -55,6 +55,20 @@ class TeacherProfile(models.Model):
     address = models.CharField(max_length=255, blank=True)
     photo = models.ImageField(upload_to="teachers/", blank=True, validators=IMAGE_VALIDATORS)
     is_archived = models.BooleanField(default=False, db_index=True)
+    signin_code_hash = models.CharField(max_length=255, null=True, blank=True)
+    signin_code_issued_at = models.DateTimeField(null=True, blank=True)
+
+    def set_signin_code(self, raw_code):
+        from django.contrib.auth.hashers import make_password
+        from django.utils import timezone
+        self.signin_code_hash = make_password(raw_code)
+        self.signin_code_issued_at = timezone.now()
+
+    def check_signin_code(self, raw_code):
+        from django.contrib.auth.hashers import check_password
+        if not self.signin_code_hash:
+            return False
+        return check_password(raw_code, self.signin_code_hash)
 
     def __str__(self):
         return self.user.full_name

@@ -13,6 +13,22 @@ const GRADING_SCALE = [
   { range: '0 – 49', grade: 'E', remark: 'POOR' },
 ]
 
+const A_LEVEL_GRADING_SCALE = [
+  { range: '80 – 100', grade: 'A', points: 6, remark: 'EXCELLENT' },
+  { range: '70 – 79', grade: 'B', points: 5, remark: 'VERY GOOD' },
+  { range: '60 – 69', grade: 'C', points: 4, remark: 'GOOD' },
+  { range: '50 – 59', grade: 'D', points: 3, remark: 'FAIR' },
+  { range: '40 – 49', grade: 'E', points: 2, remark: 'PASS' },
+  { range: '35 – 39', grade: 'O', points: 1, remark: 'SUB PASS' },
+  { range: '0 – 34', grade: 'F', points: 0, remark: 'FAIL' },
+]
+
+const IDENTIFIER_SCALE = [
+  { ident: '3', range: '2.5 – 3.0', desc: 'OUTSTANDING' },
+  { ident: '2', range: '1.5 – 2.4', desc: 'MODERATE' },
+  { ident: '1', range: '1.0 – 1.4', desc: 'BASIC' },
+]
+
 function getIdentifierInfo(c1) {
   if (c1 == null) return { ident: '—', desc: '—', num: null }
   const raw = Math.round(Number(c1))
@@ -157,30 +173,42 @@ export function SingleReportCard({ student, school }) {
             {(() => {
               const identList = []
               const rows = subjects.length ? subjects.map((sub, i) => {
+                const rawComps = sub.raw_components || {}
                 const comps = sub.components || {}
-                // 20% column: Mid-Term is computed only if BOT marks is not provided
-                const botVal = comps['BOT'] != null ? Number(comps['BOT']) : null
-                const midVal = comps['MID'] != null ? Number(comps['MID']) : (comps['MIDTERM'] != null ? Number(comps['MIDTERM']) : null)
-                const col20 = botVal != null ? botVal : (midVal != null ? midVal : null)
+                // 20% column: BOT marks entered out of 20
+                const botVal = rawComps['BOT'] != null ? Number(rawComps['BOT']) : (comps['BOT'] != null ? Number(comps['BOT']) : null)
+                const midVal = rawComps['MID'] != null ? Number(rawComps['MID']) : (rawComps['MIDTERM'] != null ? Number(rawComps['MIDTERM']) : (comps['MID'] != null ? Number(comps['MID']) : null))
+                const col20 = botVal != null ? botVal : null
 
                 // 80% column: End of term examination (out of 80)
-                const eotVal = comps['EOT'] != null ? Number(comps['EOT']) : (comps['FINAL'] != null ? Number(comps['FINAL']) : null)
+                const eotVal = rawComps['FINAL'] != null ? Number(rawComps['FINAL']) : (rawComps['EOT'] != null ? Number(rawComps['EOT']) : (comps['FINAL'] != null ? Number(comps['FINAL']) : (comps['EOT'] != null ? Number(comps['EOT']) : null)))
 
                 // 100% column: BOT (out of 20) + End of term (out of 80) = FINAL RESULTS out of 100
-                const final100 = col20 != null && eotVal != null
-                  ? (col20 + eotVal)
-                  : (eotVal != null ? eotVal : (col20 != null ? col20 : (sub.total != null ? Number(sub.total) : 0)))
+                // Mid-Term is NOT calculated in the final term results
+                const final100 = sub.total != null
+                  ? Number(sub.total)
+                  : (col20 != null && eotVal != null
+                      ? (col20 + eotVal)
+                      : (eotVal != null ? eotVal : (col20 != null ? col20 : 0)))
 
-                // C1, C2, AVG: AVG = C1, C2 (meaning C1, C2 and AVG are identical)
-                const c1Raw = comps['C1'] != null
-                  ? Number(comps['C1'])
-                  : (col20 != null ? (col20 / 20.0) * 3.0 : (final100 != null ? (final100 / 100.0) * 3.0 : null))
+                // C1 calculated as ((marks obtained/20)*3)
+                const c1Raw = sub.c1 != null
+                  ? Number(sub.c1)
+                  : (col20 != null ? (col20 / 20.0) * 3.0 : (comps['C1'] != null ? Number(comps['C1']) : null))
                 const c1 = c1Raw != null ? Number(c1Raw.toFixed(1)) : null
-                const c2 = c1
-                const avg = c1
 
-                // IDENT is C1 rounded to nearest integer (0-1: BASIC, 2: MODERATE, 3: OUTSTANDING)
-                const subIdInfo = getIdentifierInfo(c1)
+                // C2: Mid-Term marks out of 20 converted to C2
+                const c2Raw = sub.c2 != null
+                  ? Number(sub.c2)
+                  : (midVal != null ? (midVal / 20.0) * 3.0 : c1)
+                const c2 = c2Raw != null ? Number(c2Raw.toFixed(1)) : c1
+
+                // AVG: mean of C1 and C2 (or C1 if only C1)
+                const avgRaw = (c1 != null && c2 != null) ? (c1 + c2) / 2.0 : (c1 != null ? c1 : c2)
+                const avg = avgRaw != null ? Number(avgRaw.toFixed(1)) : null
+
+                // IDENT is AVG (or C1) rounded to nearest integer (0-1: BASIC, 2: MODERATE, 3: OUTSTANDING)
+                const subIdInfo = getIdentifierInfo(avg != null ? avg : c1)
                 if (subIdInfo.num != null) identList.push(subIdInfo.num)
 
                 return (
@@ -226,14 +254,18 @@ export function SingleReportCard({ student, school }) {
       {(() => {
         const identList = []
         subjects.forEach((sub) => {
+          const rawComps = sub.raw_components || {}
           const comps = sub.components || {}
-          const botVal = comps['BOT'] != null ? Number(comps['BOT']) : null
-          const midVal = comps['MID'] != null ? Number(comps['MID']) : (comps['MIDTERM'] != null ? Number(comps['MIDTERM']) : null)
-          const col20 = botVal != null ? botVal : (midVal != null ? midVal : null)
-          const final100 = sub.total != null ? Number(sub.total) : null
-          const c1Raw = comps['C1'] != null ? Number(comps['C1']) : (col20 != null ? (col20 / 20.0) * 3.0 : (final100 != null ? (final100 / 100.0) * 3.0 : null))
+          const botVal = rawComps['BOT'] != null ? Number(rawComps['BOT']) : (comps['BOT'] != null ? Number(comps['BOT']) : null)
+          const midVal = rawComps['MID'] != null ? Number(rawComps['MID']) : (rawComps['MIDTERM'] != null ? Number(rawComps['MIDTERM']) : (comps['MID'] != null ? Number(comps['MID']) : null))
+          const col20 = botVal != null ? botVal : null
+          const c1Raw = sub.c1 != null ? Number(sub.c1) : (col20 != null ? (col20 / 20.0) * 3.0 : (comps['C1'] != null ? Number(comps['C1']) : null))
           const c1 = c1Raw != null ? Number(c1Raw.toFixed(1)) : null
-          const subIdInfo = getIdentifierInfo(c1)
+          const c2Raw = sub.c2 != null ? Number(sub.c2) : (midVal != null ? (midVal / 20.0) * 3.0 : c1)
+          const c2 = c2Raw != null ? Number(c2Raw.toFixed(1)) : c1
+          const avgRaw = (c1 != null && c2 != null) ? (c1 + c2) / 2.0 : (c1 != null ? c1 : c2)
+          const avg = avgRaw != null ? Number(avgRaw.toFixed(1)) : null
+          const subIdInfo = getIdentifierInfo(avg != null ? avg : c1)
           if (subIdInfo.num != null) identList.push(subIdInfo.num)
         })
         const overallIdentSum = identList.length ? identList.reduce((acc, v) => acc + v, 0) : '—'
@@ -285,19 +317,63 @@ export function SingleReportCard({ student, school }) {
 
       {/* Grading Scale Footnote */}
       <div style={{ marginTop: 8 }}>
-        <div style={{ fontSize: '9.5px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>Official Grading Scale & Remarks:</div>
-        <table className="rc-grading-scale">
-          <thead>
-            <tr>
-              {GRADING_SCALE.map((g) => <th key={g.grade}>{g.range}%</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              {GRADING_SCALE.map((g) => <td key={g.grade}><b>Grade {g.grade}</b> ({g.remark})</td>)}
-            </tr>
-          </tbody>
-        </table>
+        {isALevel ? (
+          <div>
+            <div style={{ fontSize: '9.5px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>Official Grading Scale & Points:</div>
+            <table className="rc-grading-scale">
+              <thead>
+                <tr>
+                  {A_LEVEL_GRADING_SCALE.map((g) => <th key={g.grade}>{g.range}%</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {A_LEVEL_GRADING_SCALE.map((g) => <td key={g.grade}><b>{g.grade}</b> ({g.points} Pts)</td>)}
+                </tr>
+                <tr>
+                  {A_LEVEL_GRADING_SCALE.map((g) => <td key={g.grade} style={{ fontSize: '8.5px' }}>{g.remark}</td>)}
+                </tr>
+              </tbody>
+            </table>
+            <div style={{ fontSize: '8.5px', color: '#4b5563', marginTop: 3, fontStyle: 'italic' }}>
+              Subsidiary Subjects (General Paper / Sub-Maths / ICT): Score &ge; 50 = Credit (1 Pt) | 40 – 49 = Pass | 0 – 39 = F (Fail)
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize: '9.5px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>Official Grading Scale & Competency Descriptors:</div>
+            <table className="rc-grading-scale">
+              <thead>
+                <tr>
+                  {GRADING_SCALE.map((g) => <th key={g.grade}>{g.range}%</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {GRADING_SCALE.map((g) => <td key={g.grade}><b>Grade {g.grade}</b> ({g.remark})</td>)}
+                </tr>
+              </tbody>
+            </table>
+            <table className="rc-grading-scale" style={{ marginTop: 4 }}>
+              <thead>
+                <tr>
+                  <th>IDENTIFIER</th>
+                  <th>SCORE RANGE</th>
+                  <th>DESCRIPTOR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {IDENTIFIER_SCALE.map((sc) => (
+                  <tr key={sc.ident}>
+                    <td><b>{sc.ident}</b></td>
+                    <td>{sc.range}</td>
+                    <td><b>{sc.desc}</b></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </article>
   )

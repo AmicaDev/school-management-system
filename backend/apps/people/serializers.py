@@ -1,3 +1,7 @@
+import re
+import secrets
+import string
+
 from django.db import transaction
 from rest_framework import serializers
 
@@ -6,6 +10,37 @@ from apps.users.models import User
 from apps.users.passwords import check_password_strength
 
 from .models import StaffMember, Student, TeacherProfile
+
+
+def generate_teacher_code():
+    """Default random code in format XXXX-NNNN (e.g. ABCD-1234)."""
+    letters = "".join(secrets.choice(string.ascii_uppercase) for _ in range(4))
+    digits = "".join(secrets.choice(string.digits) for _ in range(4))
+    return f"{letters}-{digits}"
+
+
+def generate_unique_index_no(year=None):
+    from datetime import date
+    y = year or date.today().year
+    prefix = f"STU/{y}/"
+    for _ in range(100):
+        code = f"{prefix}{secrets.randbelow(90000) + 10000}"
+        if not Student.objects.filter(index_no__iexact=code).exists():
+            return code
+    return f"{prefix}{secrets.token_hex(3).upper()}"
+
+
+def generate_unique_teacher_code():
+    for _ in range(100):
+        code = generate_teacher_code()
+        collision = False
+        for p in TeacherProfile.objects.filter(signin_code_hash__isnull=False).exclude(signin_code_hash=""):
+            if p.check_signin_code(code):
+                collision = True
+                break
+        if not collision:
+            return code
+    return code
 
 
 class StudentSerializer(serializers.ModelSerializer):
@@ -27,10 +62,13 @@ class StudentSerializer(serializers.ModelSerializer):
         return str(obj.stream) if obj.stream_id else None
 
     def validate_index_no(self, v):
+        v = (v or "").strip()
+        if not v:
+            raise serializers.ValidationError("This field is required.")
         qs = Student.objects.filter(index_no__iexact=v)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
-        if v and qs.exists():
+        if qs.exists():
             raise serializers.ValidationError("This index number is already in use.")
         return v
 
@@ -110,6 +148,7 @@ class TeacherSerializer(_UserWriteMixin, serializers.ModelSerializer):
     phone = serializers.CharField(source="user.phone", required=False, allow_blank=True)
     is_active = serializers.BooleanField(source="user.is_active", required=False)
     password = serializers.CharField(write_only=True, required=False)
+    signin_code = serializers.CharField(write_only=True, required=False, allow_blank=True)
     user_id = serializers.IntegerField(source="user.id", read_only=True)
     full_name = serializers.CharField(source="user.full_name", read_only=True)
     assignments = serializers.SerializerMethodField()
@@ -120,9 +159,32 @@ class TeacherSerializer(_UserWriteMixin, serializers.ModelSerializer):
     class Meta:
         model = TeacherProfile
         fields = ["id", "user_id", "username", "email", "first_name", "last_name", "full_name", "phone", "is_active",
-                  "password", "gender", "bio", "nationality", "marital_status", "qualification", "years_experience",
+                  "password", "signin_code", "gender", "bio", "nationality", "marital_status", "qualification", "years_experience",
                   "languages", "address", "photo", "is_archived", "assignments", "class_stream_ids"]
         read_only_fields = ["is_archived"]
+
+    def _validate_custom_code(self, code, instance=None):
+        from apps.academics.models import Subject
+        code = code.strip()
+        if len(code) < 4:
+            raise serializers.ValidationError({
+                "signin_code": "Sign-in code must be at least 4 characters long."
+            })
+        code_norm = re.sub(r"[^a-zA-Z0-9]+", "", code).lower()
+        for s in Subject.objects.all():
+            s_name_norm = re.sub(r"[^a-zA-Z0-9]+", "", s.name).lower()
+            s_code_norm = re.sub(r"[^a-zA-Z0-9]+", "", s.code).lower()
+            if code_norm in (s_name_norm, s_code_norm):
+                raise serializers.ValidationError({
+                    "signin_code": f"A bare subject name or code cannot be used. Suffix it with the class (e.g. {s.name}-S1) for security."
+                })
+        for p in TeacherProfile.objects.filter(signin_code_hash__isnull=False).exclude(signin_code_hash=""):
+            if instance and p.pk == instance.pk:
+                continue
+            if p.check_signin_code(code):
+                raise serializers.ValidationError({
+                    "signin_code": "This sign-in code is already assigned to another teacher."
+                })
 
     def validate(self, attrs):
         uname = (attrs.get("user") or {}).get("username")
@@ -144,8 +206,17 @@ class TeacherSerializer(_UserWriteMixin, serializers.ModelSerializer):
         udata = validated.pop("user")
         class_streams = udata.pop("class_streams", None)
         udata["password"] = validated.pop("password", None)
+        raw_code = (validated.pop("signin_code", None) or "").strip()
+        if raw_code:
+            self._validate_custom_code(raw_code)
+        else:
+            raw_code = generate_unique_teacher_code()
+
         user = self._make_user(udata, "TEACHER")
         profile = TeacherProfile.objects.create(user=user, **validated)
+        profile.set_signin_code(raw_code)
+        profile.save(update_fields=["signin_code_hash", "signin_code_issued_at"])
+        profile._raw_signin_code = raw_code
         if class_streams is not None:
             user.class_streams.set(class_streams)
         return profile
@@ -155,16 +226,35 @@ class TeacherSerializer(_UserWriteMixin, serializers.ModelSerializer):
         udata = validated.pop("user", {})
         class_streams = udata.pop("class_streams", None)
         pwd = validated.pop("password", None)
+        raw_code = (validated.pop("signin_code", None) or "").strip()
         for k, v in udata.items():
             setattr(instance.user, k, v)
         if pwd:
             check_password_strength(pwd, instance.user)
             instance.user.set_password(pwd)
         instance.user.save()
+
+        if raw_code:
+            self._validate_custom_code(raw_code, instance=instance)
+            instance.set_signin_code(raw_code)
+            instance.save(update_fields=["signin_code_hash", "signin_code_issued_at"])
+            instance._raw_signin_code = raw_code
+
         profile = super().update(instance, validated)
+        if raw_code:
+            profile._raw_signin_code = raw_code
         if class_streams is not None:
             instance.user.class_streams.set(class_streams)
         return profile
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        raw_code = getattr(instance, "_raw_signin_code", None)
+        if raw_code:
+            data["signin_code"] = raw_code
+        else:
+            data.pop("signin_code", None)
+        return data
 
 
 class StaffSerializer(serializers.ModelSerializer):

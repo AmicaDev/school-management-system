@@ -1,9 +1,10 @@
 from django.db.models import Count
+from django.db.models.deletion import ProtectedError
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.audit.mixins import AuditMixin, permanently_delete
+from apps.audit.mixins import AuditMixin, ProtectedRecordDelete, permanently_delete
 from apps.audit.services import audit
 from apps.users.models import User
 from apps.users.permissions import IsAdmin, roles_required
@@ -125,6 +126,21 @@ class TeacherViewSet(AuditMixin, viewsets.ModelViewSet):
             qs = qs.filter(is_archived=False)
         return qs
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.query_params.get("permanent") == "true":
+            user = instance.user
+            if user and user.role == R.ADMIN:
+                return Response({"detail": "Administrator accounts cannot be permanently deleted."}, status=400)
+            label = str(instance)
+            if user:
+                user.delete()
+            else:
+                instance.delete()
+            audit(request, "PERMANENT_DELETE", "teachers", label)
+            return Response(status=204)
+        return super().destroy(request, *args, **kwargs)
+
     def perform_destroy(self, instance):
         instance.is_archived = True
         instance.user.is_active = False
@@ -144,7 +160,19 @@ class TeacherViewSet(AuditMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["delete"], url_path="permanent-delete")
     def permanent_delete(self, request, pk=None):
-        permanently_delete(request, self.get_object(), "teachers")
+        instance = self.get_object()
+        user = instance.user
+        if user and user.role == R.ADMIN:
+            return Response({"detail": "Administrator accounts cannot be permanently deleted."}, status=400)
+        label = str(instance)
+        try:
+            if user:
+                user.delete()
+            else:
+                instance.delete()
+        except ProtectedError as exc:
+            raise ProtectedRecordDelete() from exc
+        audit(request, "PERMANENT_DELETE", "teachers", label)
         return Response(status=204)
 
     @action(detail=False, methods=["post"], url_path="import", permission_classes=[IsAdmin])
@@ -160,7 +188,35 @@ class StaffViewSet(AuditMixin, viewsets.ModelViewSet):
     filterset_fields = ["gender", "category", "status", "department"]
     search_fields = ["name", "position", "department"]
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.query_params.get("permanent") == "true":
+            label = str(instance)
+            instance.delete()
+            audit(request, "PERMANENT_DELETE", "staff", label)
+            return Response(status=204)
+        return super().destroy(request, *args, **kwargs)
+
     def perform_destroy(self, instance):
         instance.status = "INACTIVE"
         instance.save(update_fields=["status"])
         audit(self.request, "DEACTIVATE", "staff", str(instance))
+
+    @action(detail=True, methods=["delete"], url_path="permanent-delete")
+    def permanent_delete(self, request, pk=None):
+        instance = self.get_object()
+        label = str(instance)
+        try:
+            instance.delete()
+        except ProtectedError as exc:
+            raise ProtectedRecordDelete() from exc
+        audit(request, "PERMANENT_DELETE", "staff", label)
+        return Response(status=204)
+
+    @action(detail=True, methods=["post"])
+    def restore(self, request, pk=None):
+        instance = self.get_object()
+        instance.status = "ACTIVE"
+        instance.save(update_fields=["status"])
+        audit(request, "RESTORE", "staff", str(instance))
+        return Response(self.get_serializer(instance).data)

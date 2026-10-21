@@ -22,8 +22,8 @@ class Command(BaseCommand):
         for i, (n, mn, mx, g, r) in enumerate([("A", 90, 100, "A", "Excellent"), ("B", 80, 89.99, "B", "Very good"),
                                               ("C", 70, 79.99, "C", "Good"), ("D", 60, 69.99, "D", "Fair"), ("F", 0, 59.99, "F", "Needs support")]):
             GradeBand.objects.get_or_create(grade=g, defaults={"minimum": mn, "maximum": mx, "description": n, "remark": r})
-        for i, (n, c, w, m) in enumerate([("Assignment", "ASSIGNMENT", 10, 10), ("Beginning of Term", "BOT", 20, 100),
-                                         ("Mid-Term", "MID", 30, 100), ("End of Term", "FINAL", 40, 100)]):
+        for i, (n, c, w, m) in enumerate([("Assignment", "ASSIGNMENT", 0, 10), ("Beginning of Term", "BOT", 20, 20),
+                                         ("Mid-Term", "MID", 0, 20), ("End of Term", "FINAL", 80, 80)]):
             ExamType.objects.get_or_create(code=c, defaults={"name": n, "weight": Decimal(w), "default_max": Decimal(m), "order": i})
         y, _ = AcademicYear.objects.get_or_create(name=str(date.today().year), defaults={
             "start_date": date(date.today().year, 1, 1), "end_date": date(date.today().year, 12, 31), "is_active": True})

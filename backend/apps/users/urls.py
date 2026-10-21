@@ -9,6 +9,7 @@ router.register("users", views.UserViewSet, basename="user")
 
 urlpatterns = [
     path("login/", views.LoginView.as_view()),
+    path("teacher/login/", views.TeacherLoginView.as_view()),
     path("refresh/", TokenRefreshView.as_view()),
     path("logout/", views.LogoutView.as_view()),
     path("me/", views.MeView.as_view()),

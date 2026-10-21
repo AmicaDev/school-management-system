@@ -183,7 +183,7 @@ def grid(request):
     bands, ets = list(GradeBand.objects.all()), list(ExamType.objects.filter(is_active=True))
     by_student = {}
     for a in Assessment.objects.filter(student__stream_id=stream, subject_id=subject, paper_number=paper_number,
-                                       term_id=term).select_related("subject"):
+                                       term_id=term).select_related("subject", "exam_type"):
         by_student.setdefault(a.student_id, []).append(a)
     rows = []
     for s in Student.objects.filter(stream_id=stream, is_archived=False).order_by("last_name", "first_name"):
@@ -193,10 +193,22 @@ def grid(request):
         for a in items:
             cells.setdefault(a.exam_type.code, {"score": a.score, "max": a.max_score})
         rows.append({"student": s.id, "name": s.full_name, "index_no": s.index_no, "cells": cells,
+                     "c1": sub[0].get("c1") if sub else None,
+                     "c2": sub[0].get("c2") if sub else None,
                      "total": sub[0]["total"] if sub else None, "grade": sub[0]["grade"] if sub else "",
                      "remark": sub[0]["remark"] if sub else ""})
+    exam_types_data = []
+    for e in ets:
+        def_max = e.default_max
+        if e.code == "BOT" and def_max == Decimal("100"):
+            def_max = Decimal("20")
+        elif e.code == "MID" and def_max == Decimal("100"):
+            def_max = Decimal("20")
+        elif e.code in ("FINAL", "EOT") and def_max == Decimal("100"):
+            def_max = Decimal("80")
+        exam_types_data.append({"id": e.id, "code": e.code, "name": e.name, "default_max": def_max})
     return Response({"paper_number": paper_number,
-                     "exam_types": [{"id": e.id, "code": e.code, "name": e.name, "default_max": e.default_max} for e in ets],
+                     "exam_types": exam_types_data,
                      "rows": rows})
 
 

@@ -290,8 +290,8 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 .auth-btn { background: #0b2a6b !important; border-color: #0b2a6b !important; color: #ffffff !important; min-height: 48px; font-size: 1.05rem; }
 .auth-btn:hover { background: #082058 !important; }
 .auth-links { text-align: center; margin-top: var(--sp-4); font-size: var(--fs-sm); }
-.auth-links a { color: #0b2a6b; text-decoration: none; }
-.auth-links a:hover { text-decoration: underline; }
+.auth-links a, .auth-links button { color: #0b2a6b; text-decoration: none; background: none; border: none; padding: 0; font: inherit; cursor: pointer; }
+.auth-links a:hover, .auth-links button:hover { text-decoration: underline; }
 
 @media (max-width: 860px) {
   .auth-wrap { grid-template-columns: 1fr; }

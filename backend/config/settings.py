@@ -124,7 +124,9 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend",
                                 "rest_framework.filters.SearchFilter", "rest_framework.filters.OrderingFilter"],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.AnonRateThrottle", "rest_framework.throttling.UserRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"anon": "60/min", "user": "600/min", "login": "60/min", "reset": "5/hour"},
+    # Throttling rates. Note: Without REDIS_URL, cache is per-process LocMemCache,
+    # so per-identifier lockout and teacher_login rates degrade gracefully per worker process.
+    "DEFAULT_THROTTLE_RATES": {"anon": "60/min", "user": "600/min", "login": "60/min", "teacher_login": "10/min", "reset": "5/hour"},
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "EXCEPTION_HANDLER": "apps.audit.handlers.exception_handler",
 }

@@ -52,6 +52,35 @@ class ImportTests(Base):
         self.assertEqual(r.data["created"], 1, r.content)
         self.assertEqual(User.objects.get(username="newp").children.count(), 2)
 
+    def test_student_import_with_minimal_name_gender_class(self):
+        self.login("adm")
+        csv_bytes = "name,gender,class\nGrace Nakato,F,Senior 1\n".encode()
+        r = self.upload("students", "min_students.csv", csv_bytes, dry="false")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["created"], 1)
+        s = Student.objects.get(first_name="Grace", last_name="Nakato")
+        self.assertEqual(s.gender, "F")
+        self.assertTrue(s.index_no.startswith("STU/"))
+        self.assertEqual(s.stream.school_class.name, "Senior 1")
+        self.assertIsNone(s.date_of_birth)
+
+    def test_teacher_import_with_minimal_name_gender_subject(self):
+        self.login("adm")
+        csv_bytes = "name,gender,subject\nSamuel Mukasa,M,Chemistry\n".encode()
+        r = self.upload("teachers", "min_teachers.csv", csv_bytes, dry="false")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["created"], 1)
+        u = User.objects.get(first_name="Samuel", last_name="Mukasa")
+        self.assertEqual(u.role, "TEACHER")
+        self.assertTrue(u.username.startswith("samuel.mukasa"))
+        p = TeacherProfile.objects.get(user=u)
+        self.assertEqual(p.gender, "M")
+        self.assertTrue(p.signin_code_hash)
+        creds = r.data["credentials"][0]
+        self.assertTrue(creds["temporary_password"])
+        self.assertTrue(creds["signin_code"])
+        self.assertEqual(creds["subject"], "Chemistry")
+
     def test_non_admin_cannot_import(self):
         self.login("t1")
         self.assertEqual(self.upload("students", "s.csv", b"first_name,last_name,gender\nA,B,M\n").status_code, 403)
@@ -156,3 +185,80 @@ class BootstrapTests(Base):
         with mock.patch.dict(os.environ, {"BOOTSTRAP_ADMIN_USERNAME": "weak", "BOOTSTRAP_ADMIN_PASSWORD": "123"}):
             call_command("bootstrap_users", stdout=io.StringIO(), stderr=io.StringIO())
         self.assertFalse(User.objects.filter(username="weak").exists())
+
+
+class Phase3AdminImprovementTests(Base):
+    def test_admin_account_cannot_be_permanently_deleted(self):
+        self.login("adm")
+        adm_user = User.objects.get(username="adm")
+        r = self.client.delete(f"/api/v1/auth/users/{adm_user.id}/permanent-delete/")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Administrator accounts cannot be permanently deleted", r.data.get("detail", ""))
+        self.assertTrue(User.objects.filter(username="adm").exists())
+
+    def test_teacher_and_staff_permanent_deletion(self):
+        from apps.people.models import StaffMember
+        self.login("adm")
+        # Create a teacher user
+        u = User.objects.create(username="temp_teacher", first_name="Temp", last_name="Teacher", role="TEACHER")
+        u.set_password(PW)
+        u.save()
+        tp = TeacherProfile.objects.create(user=u, gender="M")
+
+        # Create a staff member
+        sm = StaffMember.objects.create(name="Temp Staff", gender="F", category="NON_TEACHING", position="Cook")
+
+        # Permanently delete teacher
+        r_t = self.client.delete(f"/api/v1/teachers/{tp.id}/permanent-delete/")
+        self.assertEqual(r_t.status_code, 204)
+        self.assertFalse(TeacherProfile.objects.filter(id=tp.id).exists())
+        self.assertFalse(User.objects.filter(id=u.id).exists())
+
+        # Permanently delete staff
+        r_s = self.client.delete(f"/api/v1/staff/{sm.id}/permanent-delete/")
+        self.assertEqual(r_s.status_code, 204)
+        self.assertFalse(StaffMember.objects.filter(id=sm.id).exists())
+
+    def test_attendance_fields_and_filtering(self):
+        from datetime import date
+        from apps.attendance.models import AttendanceRecord
+        self.login("adm")
+        ar = AttendanceRecord.objects.create(
+            student=self.s1,
+            stream=self.stream,
+            subject=self.maths,
+            term=self.term,
+            date=date.today(),
+            status="PRESENT",
+            recorded_by=self.admin,
+        )
+        r = self.client.get(f"/api/v1/attendance/?stream__school_class={self.stream.school_class.id}&student__gender={self.s1.gender}")
+        self.assertEqual(r.status_code, 200)
+        items_data = r.data.get("results", r.data)
+        self.assertTrue(len(items_data) >= 1)
+        rec = next(item for item in items_data if item["id"] == ar.id)
+        self.assertEqual(rec["class_name"], self.stream.school_class.name)
+        self.assertEqual(rec["gender"], self.s1.gender)
+        self.assertEqual(rec["subject_name"], self.maths.name)
+        self.assertEqual(rec["term_name"], self.term.name)
+        self.assertEqual(rec["academic_year"], self.term.year.name)
+
+    def test_class_summary_detailed_includes_teacher_initials(self):
+        from apps.results.models import Assessment
+        self.login("adm")
+        Assessment.objects.create(
+            student=self.s1,
+            subject=self.maths,
+            exam_type=self.et,
+            paper_number=1,
+            term=self.term,
+            score=15,
+            max_score=20,
+        )
+        r = self.client.get(f"/api/v1/results/class-summary/?stream={self.stream.id}&term={self.term.id}&detailed=1")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(len(r.data) >= 1)
+        sub_rows = r.data[0]["report"]["subjects"]
+        if sub_rows:
+            self.assertIn("teacher_initials", sub_rows[0])
+

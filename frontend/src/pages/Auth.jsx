@@ -48,52 +48,106 @@ function AuthFrame({ title, children, side = true }) {
 }
 
 export function Login() {
-  const { login } = useAuth()
+  const { login, teacherLogin } = useAuth()
   const nav = useNavigate()
   const loc = useLocation()
+  const [isTeacher, setIsTeacher] = useState(false)
   const [f, setF] = useState({ username: '', password: '' })
   const [showPw, setShowPw] = useState(false)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+
+  const switchMode = (teacherMode) => {
+    setIsTeacher(teacherMode)
+    setErr('')
+    setF({ username: '', password: '' })
+    setShowPw(false)
+  }
+
   const submit = async (e) => {
     e.preventDefault()
-    if (!f.username || !f.password) return setErr('Enter your username (or student index number) and password.')
+    if (!f.username || !f.password) {
+      return setErr(isTeacher ? 'Enter your teacher identifier and admin-issued code.' : 'Enter your username (or student index number) and password.')
+    }
     setBusy(true); setErr('')
     try {
-      const u = await login(f.username.trim(), f.password)
+      const u = isTeacher
+        ? await teacherLogin(f.username.trim(), f.password.trim())
+        : await login(f.username.trim(), f.password)
       const from = loc.state?.from
       nav(from && from.startsWith(HOME[u.role]) ? from : HOME[u.role], { replace: true })
-    } catch (e2) { setErr(e2.response?.status === 401 ? 'Incorrect username or password.' : errorMessage(e2)); setBusy(false) }
+    } catch (e2) {
+      setErr(e2.response?.status === 401 ? 'Incorrect username or password.' : errorMessage(e2))
+      setBusy(false)
+    }
   }
+
   return (
-    <AuthFrame title="Sign in">
-      <p className="auth-sub">Parents can sign in with their child's index number. Teachers can sign in with their teaching subject and subject code.</p>
+    <AuthFrame title={isTeacher ? 'Teacher sign in' : 'Sign in'}>
+      {isTeacher ? (
+        <p className="auth-sub">
+          Sign in using your assigned teacher username, email, or full name and your admin-issued code.
+        </p>
+      ) : (
+        <p className="auth-sub">
+          Parents can sign in with their child's index number.
+        </p>
+      )}
       <Alert>{err}</Alert>
       <form onSubmit={submit} noValidate>
         <div className="field">
-          <label htmlFor="u">Username, student index number, or subject</label>
-          <input id="u" className="input" autoComplete="username" placeholder="Username" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} />
+          <label htmlFor="u">{isTeacher ? 'Teacher username' : 'Username or student index number'}</label>
+          <input
+            id="u"
+            className="input"
+            autoComplete="username"
+            placeholder={isTeacher ? 'Username, email, or full name' : 'Username'}
+            value={f.username}
+            onChange={(e) => setF({ ...f, username: e.target.value })}
+          />
         </div>
         <div className="field">
-          <label htmlFor="p">Password or subject code</label>
+          <label htmlFor="p">{isTeacher ? 'Subject code (given by the administrator)' : 'Password'}</label>
           <div className="pw-wrap">
-            <input id="p" type={showPw ? 'text' : 'password'} className="input" autoComplete="current-password" placeholder="Password code" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
+            <input
+              id="p"
+              type={showPw ? 'text' : 'password'}
+              className="input"
+              autoComplete={isTeacher ? 'one-time-code' : 'current-password'}
+              placeholder={isTeacher ? 'Admin-issued code' : 'Password'}
+              value={f.password}
+              onChange={(e) => setF({ ...f, password: e.target.value })}
+            />
             <EyeToggle show={showPw} onToggle={() => setShowPw((s) => !s)} />
           </div>
         </div>
-        <button className="btn primary auth-btn" style={{ width: '100%' }} disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+        <button className="btn primary auth-btn" style={{ width: '100%' }} disabled={busy}>
+          {busy ? 'Signing in…' : 'Sign in'}
+        </button>
       </form>
-      <p className="auth-links"><Link to="/forgot-password">Forgot password</Link> · <Link to="/register">Need an account?</Link></p>
+      <p className="auth-links">
+        {isTeacher ? (
+          <button type="button" onClick={() => switchMode(false)}>
+            Sign in as a student or staff
+          </button>
+        ) : (
+          <button type="button" onClick={() => switchMode(true)}>
+            Sign in as a teacher?
+          </button>
+        )}
+        {' · '}
+        <Link to="/forgot-password">Forgot password</Link> · <Link to="/register">Need an account?</Link>
+      </p>
     </AuthFrame>
   )
 }
 
 export function Register() {
-return (
+  return (
     <AuthFrame title="Request an account">
       <div className="alert info">Accounts are created by your school administrator so that every user is verified.</div>
       <p><b>Parents:</b> ask the school office for your child's index number and a temporary password.</p>
-      <p><b>Teachers:</b> sign in using your teaching subject (e.g. Math) and your subject code (e.g. P220), or your assigned account username.</p>
+      <p><b>Teachers:</b> sign in using your assigned teacher username (or email/full name) and the code given by your administrator.</p>
       <Link to="/login" className="btn primary">Back to sign in</Link>
     </AuthFrame>
   )

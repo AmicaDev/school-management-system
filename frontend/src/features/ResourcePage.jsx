@@ -110,6 +110,8 @@ function FormModal({ cfg, record, onClose, onSaved }) {
         cfg.fields.forEach((f) => {
           const v = values[f.name]
           if (f.type === 'file') { if (v instanceof File) body.append(f.name, v) }
+          else if (f.type === 'password' && !v) return
+          else if (f.name === 'signin_code' && !v) return
           else if (f.type === 'checkboxes' && Array.isArray(v)) body.append(f.name, JSON.stringify(v))
           else if (Array.isArray(v)) { v.forEach((x) => body.append(f.name, x)) }
           else if (v !== '' && v != null) body.append(f.name, v)
@@ -120,12 +122,13 @@ function FormModal({ cfg, record, onClose, onSaved }) {
           const v = values[f.name]
           if (f.type === 'file') return
           if (f.type === 'password' && !v) return
+          if (f.name === 'signin_code' && !v) return
           body[f.name] = v === '' && (f.type === 'date' || f.type === 'select' || f.type === 'time' || f.type === 'number') ? null : v
         })
       }
       const url = editing ? `${cfg.endpoint}${record.id}/` : cfg.endpoint
-      await api({ method: editing ? 'patch' : 'post', url, data: body })
-      onSaved()
+      const res = await api({ method: editing ? 'patch' : 'post', url, data: body })
+      onSaved(res.data)
     } catch (err) {
       setErrors(fieldErrors(err)); setMsg(errorMessage(err))
     } finally { setSaving(false) }
@@ -181,6 +184,10 @@ export default function ResourcePage({ cfg, embedded }) {
   }
 
   const permanentlyDelete = async (row) => {
+    if (row.role === 'ADMIN') {
+      alert('Administrator accounts cannot be permanently deleted.')
+      return
+    }
     if (!window.confirm(`Permanently delete this ${cfg.singular || cfg.title.toLowerCase().replace(/s$/, '')}? This cannot be undone.`)) return
     try {
       await api.delete(`${cfg.endpoint}${row.id}/permanent-delete/`)
@@ -194,10 +201,13 @@ export default function ResourcePage({ cfg, embedded }) {
       {cfg.rowActions?.(r, load)}
       {cfg.recycleBin && <>
         <button className="btn sm" onClick={() => restore(r)}>Restore</button>
-        <button className="btn sm danger" onClick={() => permanentlyDelete(r)}>Delete permanently</button>
+        {r.role !== 'ADMIN' && <button className="btn sm danger" onClick={() => permanentlyDelete(r)}>Delete permanently</button>}
       </>}
       {!cfg.readOnly && <button className="btn sm" onClick={() => setForm(r)}>Edit</button>}
       {!cfg.readOnly && !cfg.noRemove && <button className="btn sm danger" onClick={() => remove(r)}>{cfg.removeLabel || 'Archive'}</button>}
+      {!cfg.readOnly && cfg.canPermanentDelete && r.role !== 'ADMIN' && (
+        <button className="btn sm danger" title="Delete permanently" onClick={() => permanentlyDelete(r)}>Delete</button>
+      )}
     </div>) }])]
 
   return (
@@ -225,7 +235,15 @@ export default function ResourcePage({ cfg, embedded }) {
           <div className="row"><button className="btn sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page} of {Math.ceil(count / pageSize)}</span><button className="btn sm" disabled={page * pageSize >= count} onClick={() => setPage(page + 1)}>Next</button></div>
         </div>
       )}
-      {form && <FormModal cfg={cfg} record={form.id ? form : null} onClose={() => setForm(null)} onSaved={() => { setForm(null); setNotice('Saved.'); load() }} />}
+      {form && <FormModal cfg={cfg} record={form.id ? form : null} onClose={() => setForm(null)} onSaved={(savedData) => {
+        setForm(null)
+        if (savedData?.signin_code) {
+          setNotice(`Saved! Teacher sign-in code: ${savedData.signin_code} — please copy or share this with the teacher now (it will not be shown again).`)
+        } else {
+          setNotice('Saved.')
+        }
+        load()
+      }} />}
     </section>
   )
 }

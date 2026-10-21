@@ -6,6 +6,9 @@ const gender = (r) => (r.gender === 'M' ? 'Male' : r.gender === 'F' ? 'Female' :
 const badge = (k) => (r) => h(Badge, { value: r[k] }, String(r[k]))
 const yes = (k) => (r) => (r[k] ? 'Yes' : 'No')
 const streams = { endpoint: '/academics/streams/', label: 'label' }
+const schoolClasses = { endpoint: '/academics/classes/', label: 'name' }
+const termsList = { endpoint: '/academics/terms/', label: 'name' }
+const yearsList = { endpoint: '/academics/years/', label: 'name' }
 const subjects = { endpoint: '/academics/subjects/', label: (s) => `${s.code} - ${s.name}`, params: { is_archived: false } }
 const teachersByUser = { endpoint: '/teachers/', value: 'user_id', label: 'full_name' }
 
@@ -37,7 +40,7 @@ export const R = {
       { name: 'is_active', label: 'Account active', type: 'checkbox', default: true }],
   },
   teachers: {
-    title: 'Teachers', singular: 'teacher', endpoint: '/teachers/', removeLabel: 'Archive', params: {},
+    title: 'Teachers', singular: 'teacher', endpoint: '/teachers/', removeLabel: 'Archive', canPermanentDelete: true, params: {},
     columns: [{ key: 'full_name', label: 'Name' }, { key: 'username', label: 'Username' }, { key: 'phone', label: 'Phone' },
       { key: 'assignments', label: 'Subjects', render: (r) => [...new Set(r.assignments.map((a) => a.code))].join(', ') || '—' },
       { key: 'is_archived', label: 'Status', render: (r) => (r.is_archived ? 'Archived' : 'Active') }],
@@ -45,6 +48,7 @@ export const R = {
     fields: [{ name: 'username', label: 'Username', required: true }, { name: 'first_name', label: 'First name', required: true }, { name: 'last_name', label: 'Last name', required: true },
       { name: 'gender', label: 'Gender', type: 'select', options: GENDER, required: true }, { name: 'email', label: 'Email', type: 'email' }, { name: 'phone', label: 'Phone' },
       { name: 'password', label: 'Password', type: 'password', required: true, help: 'Set by the administrator. Never use the teacher\'s name.' },
+      { name: 'signin_code', label: 'Teacher sign-in code', help: 'Leave blank to generate automatically on create, or leave blank to keep the current code on edit. Memorable codes must be unique and not bare subject names.' },
       { name: 'bio', label: 'Biography', type: 'textarea' },
       { name: 'nationality', label: 'Nationality' },
       { name: 'marital_status', label: 'Marital status', type: 'radio', options: [['SINGLE', 'Single'], ['MARRIED', 'Married'], ['DIVORCED', 'Divorced'], ['WIDOWED', 'Widowed']] },
@@ -54,7 +58,7 @@ export const R = {
       { name: 'class_stream_ids', label: 'Class teacher for', type: 'multiselect', options: streams }],
   },
   staff: {
-    title: 'Staff', singular: 'staff member', endpoint: '/staff/', removeLabel: 'Deactivate',
+    title: 'Staff', singular: 'staff member', endpoint: '/staff/', removeLabel: 'Deactivate', canPermanentDelete: true,
     columns: [{ key: 'name', label: 'Name' }, { key: 'gender', label: 'Gender', render: gender }, { key: 'category', label: 'Category' }, { key: 'position', label: 'Position' },
       { key: 'department', label: 'Department' }, { key: 'contact', label: 'Contact' }, { key: 'status', label: 'Status', render: badge('status') }],
     filters: [{ name: 'category', label: 'All categories', options: [['TEACHING', 'Teaching'], ['NON_TEACHING', 'Non-teaching']] }, { name: 'status', label: 'Any status', options: [['ACTIVE', 'Active'], ['INACTIVE', 'Inactive']] }],
@@ -113,15 +117,31 @@ export const R = {
     fields: [{ name: 'title', label: 'Title', required: true }, { name: 'kind', label: 'Type', type: 'select', required: true, default: 'EVENT', options: [['EVENT', 'School event'], ['MEETING', 'Meeting'], ['EXAM', 'Examination schedule'], ['ACADEMIC', 'Academic date'], ['HOLIDAY', 'Holiday'], ['ANNOUNCEMENT', 'Announcement']] },
       { name: 'audience', label: 'Audience', type: 'select', required: true, default: 'ALL', options: [['ALL', 'Everyone'], ['TEACHER', 'Teachers'], ['PARENT', 'Parents']] },
       { name: 'start_date', label: 'Start date', type: 'date', required: true }, { name: 'end_date', label: 'End date', type: 'date' }, { name: 'description', label: 'Description', type: 'textarea' }] },
-  users: { title: 'User accounts', singular: 'user', endpoint: '/auth/users/', removeLabel: 'Deactivate',
+  users: { title: 'User accounts', singular: 'user', endpoint: '/auth/users/', removeLabel: 'Deactivate', canPermanentDelete: true,
     columns: [{ key: 'full_name', label: 'Name' }, { key: 'username', label: 'Username' }, { key: 'role', label: 'Role', render: badge('role') }, { key: 'is_active', label: 'Active', render: yes('is_active') }],
     filters: [{ name: 'role', label: 'All roles', options: [['ADMIN', 'Admin'], ['TEACHER', 'Teacher'], ['PARENT', 'Parent']] }],
     fields: [{ name: 'username', label: 'Username', required: true }, { name: 'first_name', label: 'First name' }, { name: 'last_name', label: 'Last name' }, { name: 'email', label: 'Email', type: 'email' }, { name: 'phone', label: 'Phone' },
       { name: 'role', label: 'Role', type: 'select', required: true, options: [['ADMIN', 'Admin'], ['TEACHER', 'Teacher'], ['PARENT', 'Parent']] },
       { name: 'password', label: 'Password', type: 'password', required: true, help: 'Leave blank on edit to keep the current password.' }, { name: 'is_active', label: 'Active', type: 'checkbox', default: true }] },
   attendance: { title: 'Attendance records', endpoint: '/attendance/', readOnly: true, ordering: '-date',
-    filters: [{ name: 'status', label: 'Any status', options: [['PRESENT', 'Present'], ['ABSENT', 'Absent'], ['LATE', 'Late'], ['EXCUSED', 'Excused']] }],
-    columns: [{ key: 'date', label: 'Date', render: (r) => fmtDate(r.date) }, { key: 'student_name', label: 'Student' }, { key: 'status', label: 'Status', render: badge('status') }] },
+    filters: [
+      { name: 'stream__school_class', label: 'All classes', options: schoolClasses },
+      { name: 'subject', label: 'All subjects', options: subjects },
+      { name: 'student__gender', label: 'All genders', options: GENDER },
+      { name: 'term__year', label: 'All years', options: yearsList },
+      { name: 'term', label: 'All terms', options: termsList },
+      { name: 'status', label: 'Any status', options: [['PRESENT', 'Present'], ['ABSENT', 'Absent'], ['LATE', 'Late'], ['EXCUSED', 'Excused']] },
+    ],
+    columns: [
+      { key: 'date', label: 'Date', render: (r) => fmtDate(r.date) },
+      { key: 'student_name', label: 'Student' },
+      { key: 'gender', label: 'Gender', render: gender },
+      { key: 'class', label: 'Class / Stream', render: (r) => (r.class_name ? `${r.class_name} ${r.stream_name || ''}`.trim() : (r.stream_name || '—')) },
+      { key: 'subject_name', label: 'Subject', render: (r) => r.subject_name || 'General / Daily' },
+      { key: 'term_name', label: 'Term', render: (r) => r.term_name || '—' },
+      { key: 'academic_year', label: 'Academic Year', render: (r) => r.academic_year || '—' },
+      { key: 'status', label: 'Status', render: badge('status') },
+    ] },
   audit: { title: 'Audit log', endpoint: '/audit/', readOnly: true,
     filters: [{ name: 'result', label: 'Any result', options: [['SUCCESS', 'Success'], ['FAILURE', 'Failure']] }],
     columns: [{ key: 'created_at', label: 'When', render: (r) => fmtDateTime(r.created_at) }, { key: 'actor_name', label: 'Actor' }, { key: 'role', label: 'Role' }, { key: 'action', label: 'Action' },

@@ -169,35 +169,206 @@ class AuthTests(Base):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["user"]["username"], "p1")
 
-    def test_teacher_logs_in_with_assigned_subject_and_paper_code(self):
+    def test_teacher_signs_in_with_username_and_issued_code(self):
+        profile = TeacherProfile.objects.create(user=self.t1, gender="M")
+        profile.set_signin_code("HIST-1234")
+        profile.save()
+
+        # Exact username match
+        r = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "t1", "code": "HIST-1234"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertIn("access", r.data)
+        self.assertIn("refresh", r.data)
+        self.assertEqual(r.data["user"]["username"], "t1")
+
+        # Case-insensitive username match
+        r2 = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "T1", "code": "HIST-1234"}, format="json")
+        self.assertEqual(r2.status_code, 200)
+
+    def test_teacher_signs_in_with_email_and_name_fallbacks(self):
+        self.t1.first_name = "Jane"
+        self.t1.last_name = "Doe"
+        self.t1.email = "jane.doe@school.edu"
+        self.t1.save()
+        profile = TeacherProfile.objects.create(user=self.t1, gender="F")
+        profile.set_signin_code("ABCD-5678")
+        profile.save()
+
+        # Email fallback
+        r_email = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "jane.doe@school.edu", "code": "ABCD-5678"}, format="json")
+        self.assertEqual(r_email.status_code, 200)
+        self.assertEqual(r_email.data["user"]["username"], "t1")
+
+        # Full name fallback: "Jane Doe"
+        r_name1 = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "Jane Doe", "code": "ABCD-5678"}, format="json")
+        self.assertEqual(r_name1.status_code, 200)
+
+        # Full name fallback: "Doe Jane"
+        r_name2 = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "Doe Jane", "code": "ABCD-5678"}, format="json")
+        self.assertEqual(r_name2.status_code, 200)
+
+        # Full name fallback: "janedoe"
+        r_name3 = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "janedoe", "code": "ABCD-5678"}, format="json")
+        self.assertEqual(r_name3.status_code, 200)
+
+    def test_teacher_wrong_code_and_unknown_identifier_return_401(self):
+        profile = TeacherProfile.objects.create(user=self.t1, gender="M")
+        profile.set_signin_code("ABCD-5678")
+        profile.save()
+
+        # Wrong code
+        r_wrong = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "t1", "code": "WRONG-CODE"}, format="json")
+        self.assertEqual(r_wrong.status_code, 401)
+        self.assertEqual(r_wrong.data["detail"], "Incorrect username or password.")
+
+        # Unknown identifier
+        r_unk = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "unknown_user", "code": "ABCD-5678"}, format="json")
+        self.assertEqual(r_unk.status_code, 401)
+        self.assertEqual(r_unk.data["detail"], "Incorrect username or password.")
+
+    def test_teacher_ambiguous_email_and_name_return_400(self):
+        t_dup = mk("t_dup", "TEACHER", email="shared@school.edu", first_name="Alex", last_name="Smith")
+        p_dup = TeacherProfile.objects.create(user=t_dup, gender="M")
+        p_dup.set_signin_code("DUP1-1234")
+        p_dup.save()
+
+        self.t1.email = "shared@school.edu"
+        self.t1.save()
+        profile = TeacherProfile.objects.create(user=self.t1, gender="M")
+        profile.set_signin_code("DUP2-1234")
+        profile.save()
+
+        # Ambiguous email -> 400
+        r_email = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "shared@school.edu", "code": "DUP1-1234"}, format="json")
+        self.assertEqual(r_email.status_code, 400)
+        self.assertIn("More than one teacher matches that email address", str(r_email.data))
+
+        # Ambiguous full name -> 400
+        self.t1.first_name = "Alex"
+        self.t1.last_name = "Smith"
+        self.t1.save()
+        r_name = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "Alex Smith", "code": "DUP1-1234"}, format="json")
+        self.assertEqual(r_name.status_code, 400)
+        self.assertIn("More than one teacher matches that name", str(r_name.data))
+
+    def test_teacher_archived_inactive_nonteacher_return_401(self):
+        profile = TeacherProfile.objects.create(user=self.t1, gender="M")
+        profile.set_signin_code("ABCD-5678")
+        profile.save()
+
+        # Archived teacher profile
+        profile.is_archived = True
+        profile.save()
+        r_archived = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "t1", "code": "ABCD-5678"}, format="json")
+        self.assertEqual(r_archived.status_code, 401)
+        profile.is_archived = False
+        profile.save()
+
+        # Inactive teacher user
+        self.t1.is_active = False
+        self.t1.save()
+        r_inactive = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "t1", "code": "ABCD-5678"}, format="json")
+        self.assertEqual(r_inactive.status_code, 401)
+        self.t1.is_active = True
+        self.t1.save()
+
+        # Non-teacher account (admin) attempting teacher login
+        r_nonteacher = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "adm", "code": "ABCD-5678"}, format="json")
+        self.assertEqual(r_nonteacher.status_code, 401)
+
+    def test_teacher_channel_separation_and_standard_logins_unchanged(self):
+        profile = TeacherProfile.objects.create(user=self.t1, gender="M")
+        profile.set_signin_code("CODE-1111")
+        profile.save()
+
+        # Standard admin login still works on /auth/login/
+        r_adm = self.client.post("/api/v1/auth/login/", {"username": "adm", "password": PW}, format="json")
+        self.assertEqual(r_adm.status_code, 200)
+        self.assertEqual(r_adm.data["user"]["username"], "adm")
+
+        # Standard developer login still works on /auth/login/
+        r_dev = self.client.post("/api/v1/auth/login/", {"username": "dev", "password": PW}, format="json")
+        self.assertEqual(r_dev.status_code, 200)
+        self.assertEqual(r_dev.data["user"]["username"], "dev")
+
+        # Parent login via student index_no still works on /auth/login/
+        r_parent = self.client.post("/api/v1/auth/login/", {"username": "S1", "password": PW}, format="json")
+        self.assertEqual(r_parent.status_code, 200)
+        self.assertEqual(r_parent.data["user"]["username"], "p1")
+
+        # Teacher channel cannot satisfy admin login
+        r_cross1 = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "adm", "code": PW}, format="json")
+        self.assertEqual(r_cross1.status_code, 401)
+
+        # Teacher issued-code cannot satisfy standard login
+        r_cross2 = self.client.post("/api/v1/auth/login/", {"username": "t1", "password": "CODE-1111"}, format="json")
+        self.assertEqual(r_cross2.status_code, 401)
+
+    def test_old_subject_login_path_no_longer_authenticates(self):
         TeachingAssignment.objects.filter(teacher=self.t1, subject=self.maths).update(teacher_subject_code="P221")
-        r = self.client.post("/api/v1/auth/login/", {"username": "Maths", "password": "P221"}, format="json")
-        self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(r.data["user"]["username"], "t1")
+        # Subject name + assigned paper code no longer authenticates on /auth/login/
+        r1 = self.client.post("/api/v1/auth/login/", {"username": "Maths", "password": "P221"}, format="json")
+        self.assertEqual(r1.status_code, 401)
 
-    def test_teacher_logs_in_with_subject_name_and_subject_code(self):
-        # Teacher logs in using subject code (Subject.code='math') even if teacher_subject_code is blank
-        TeachingAssignment.objects.filter(teacher=self.t1, subject=self.maths).update(teacher_subject_code="")
-        r = self.client.post("/api/v1/auth/login/", {"username": "Maths", "password": "math"}, format="json")
-        self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(r.data["user"]["username"], "t1")
+        # Subject name + subject code no longer authenticates
+        r2 = self.client.post("/api/v1/auth/login/", {"username": "Maths", "password": "math"}, format="json")
+        self.assertEqual(r2.status_code, 401)
 
-    def test_teacher_logs_in_with_subject_variant_and_class(self):
-        # Teacher logs in with variant name 'Math' and class 'P1'
-        r = self.client.post("/api/v1/auth/login/", {"username": "Math P1", "password": "math"}, format="json")
-        self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(r.data["user"]["username"], "t1")
+        # Subject variant + class no longer authenticates
+        r3 = self.client.post("/api/v1/auth/login/", {"username": "Math P1", "password": "math"}, format="json")
+        self.assertEqual(r3.status_code, 401)
 
-    def test_teacher_logs_in_with_username_and_subject_code(self):
-        # Teacher logs in using their username 't1' and assigned subject code 'math'
-        r = self.client.post("/api/v1/auth/login/", {"username": "t1", "password": "math"}, format="json")
-        self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(r.data["user"]["username"], "t1")
+        # Teacher username + subject code no longer authenticates
+        r4 = self.client.post("/api/v1/auth/login/", {"username": "t1", "password": "math"}, format="json")
+        self.assertEqual(r4.status_code, 401)
 
-    def test_teacher_subject_login_requires_matching_assigned_code(self):
-        TeachingAssignment.objects.filter(teacher=self.t1, subject=self.maths).update(teacher_subject_code="P221")
-        r = self.client.post("/api/v1/auth/login/", {"username": "Maths", "password": "wrong"}, format="json")
-        self.assertEqual(r.status_code, 401)
+    def test_teacher_code_never_exposed_and_stored_hashed(self):
+        self.client.force_authenticate(user=self.admin)
+        r_create = self.client.post("/api/v1/teachers/", {
+            "username": "secret_t",
+            "first_name": "Sec",
+            "last_name": "Ret",
+            "gender": "M",
+            "password": PW,
+        }, format="json")
+        self.assertEqual(r_create.status_code, 201)
+        issued_code = r_create.data.get("signin_code")
+        self.assertIsNotNone(issued_code)
+        self.assertIn("-", issued_code)
+
+        prof = TeacherProfile.objects.get(user__username="secret_t")
+        self.assertNotEqual(prof.signin_code_hash, issued_code)
+        self.assertTrue(prof.signin_code_hash.startswith("pbkdf2_"))
+
+        # List payload does not leak code or hash
+        r_list = self.client.get("/api/v1/teachers/")
+        self.assertEqual(r_list.status_code, 200)
+        for item in r_list.data["results"]:
+            self.assertNotIn("signin_code", item)
+            self.assertNotIn("signin_code_hash", item)
+
+        # Retrieve payload does not leak code or hash
+        r_get = self.client.get(f"/api/v1/teachers/{prof.id}/")
+        self.assertEqual(r_get.status_code, 200)
+        self.assertNotIn("signin_code", r_get.data)
+        self.assertNotIn("signin_code_hash", r_get.data)
+
+    def test_teacher_login_lockout_after_failures(self):
+        from django.core.cache import cache
+        cache.clear()
+        profile = TeacherProfile.objects.create(user=self.t1, gender="M")
+        profile.set_signin_code("CODE-9999")
+        profile.save()
+
+        # 5 consecutive failures
+        for _ in range(5):
+            r = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "t1", "code": "WRONG"}, format="json")
+            self.assertEqual(r.status_code, 401)
+
+        # 6th attempt is throttled
+        r_locked = self.client.post("/api/v1/auth/teacher/login/", {"identifier": "t1", "code": "WRONG"}, format="json")
+        self.assertEqual(r_locked.status_code, 429)
+        cache.clear()
 
     def test_password_is_hashed(self):
         self.assertNotEqual(self.admin.password, PW)
