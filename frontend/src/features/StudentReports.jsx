@@ -53,9 +53,15 @@ export function SingleReportCard({ student, school }) {
         </div>
         <div className="rc-title-area">
           <h2 className="rc-school-name">{school?.name || 'KIYINGI MEMORIAL SECONDARY SCHOOL'}</h2>
-          <div className="rc-school-meta">{school?.address || 'P.O. Box 7123, Kampala, Uganda'} • Tel: {school?.phone || '+256 414 000 000'}</div>
-          <div className="rc-school-meta">{school?.email ? `Email: ${school.email}` : 'Web: www.kiyingimemorial.sc.ug'}</div>
-          <div className="rc-motto">"{school?.motto || 'Strive to Excel'}"</div>
+          <div className="rc-school-location">3KM ALONG WABUSAANA-KYAMBOGO ROAD FROM KAKOOGE TOWNSHIP</div>
+          <div className="rc-school-meta">
+            <span>P.O.BOX KAMPALA UGANDA</span>
+            <span className="rc-school-phone">TEL:0772511555/0701511555</span>
+          </div>
+          <div className="rc-motto">**Search for wisdom**</div>
+          <div className="rc-term-title">
+            <u>END OF TERM {(report.term_name || 'TWO').toUpperCase()} ASSESSMENT REPORT CARD {report.year_name || '2026'}</u>
+          </div>
         </div>
         <div>
           {studentPhoto ? (
@@ -66,45 +72,56 @@ export function SingleReportCard({ student, school }) {
         </div>
       </div>
 
-      <div className="rc-card-banner">
-        {isALevel ? 'UGANDA ADVANCED CERTIFICATE OF EDUCATION (A-LEVEL) REPORT' : 'UGANDA CERTIFICATE OF EDUCATION (O-LEVEL) ACADEMIC REPORT'}
-      </div>
+      {/* Student Details */}
+      {isALevel ? (
+        <>
+          <div className="rc-card-banner">
+            UGANDA ADVANCED CERTIFICATE OF EDUCATION (A-LEVEL) REPORT
+          </div>
+          <div className="rc-meta-grid">
+            <div className="rc-meta-item">
+              <span className="lbl">Student Name</span>
+              <span className="val">{student.name}</span>
+            </div>
+            <div className="rc-meta-item">
+              <span className="lbl">Index Number</span>
+              <span className="val">{student.index_no}</span>
+            </div>
+            <div className="rc-meta-item">
+              <span className="lbl">Candidate No.</span>
+              <span className="val">{student.candidate_no || '—'}</span>
+            </div>
+            <div className="rc-meta-item">
+              <span className="lbl">Gender</span>
+              <span className="val">{student.gender === 'M' ? 'Male' : student.gender === 'F' ? 'Female' : '—'}</span>
+            </div>
+            <div className="rc-meta-item">
+              <span className="lbl">Class / Stream</span>
+              <span className="val">{student.stream_label || report.class_name || '—'}</span>
+            </div>
+            <div className="rc-meta-item">
+              <span className="lbl">Academic Year</span>
+              <span className="val">{report.year_name || '2026'}</span>
+            </div>
+            <div className="rc-meta-item">
+              <span className="lbl">Term</span>
+              <span className="val">{report.term_name || 'Term 1'}</span>
+            </div>
+            <div className="rc-meta-item">
+              <span className="lbl">Class Position</span>
+              <span className="val">{report.position ? `${report.position.rank} of ${report.position.out_of}` : (student.position ? `${student.position} in stream` : '—')}</span>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="rc-student-bio">
+          <div><b>NAME:</b> {student.name?.toUpperCase()}</div>
+          <div><b>CLASS:</b> {(report.class_name || student.stream_label || '').toUpperCase()}</div>
+        </div>
+      )}
 
-      {/* Student Meta Details */}
-      <div className="rc-meta-grid">
-        <div className="rc-meta-item">
-          <span className="lbl">Student Name</span>
-          <span className="val">{student.name}</span>
-        </div>
-        <div className="rc-meta-item">
-          <span className="lbl">Index Number</span>
-          <span className="val">{student.index_no}</span>
-        </div>
-        <div className="rc-meta-item">
-          <span className="lbl">Candidate No.</span>
-          <span className="val">{student.candidate_no || '—'}</span>
-        </div>
-        <div className="rc-meta-item">
-          <span className="lbl">Gender</span>
-          <span className="val">{student.gender === 'M' ? 'Male' : student.gender === 'F' ? 'Female' : '—'}</span>
-        </div>
-        <div className="rc-meta-item">
-          <span className="lbl">Class / Stream</span>
-          <span className="val">{student.stream_label || report.class_name || '—'}</span>
-        </div>
-        <div className="rc-meta-item">
-          <span className="lbl">Academic Year</span>
-          <span className="val">{report.year_name || '2026'}</span>
-        </div>
-        <div className="rc-meta-item">
-          <span className="lbl">Term</span>
-          <span className="val">{report.term_name || 'Term 1'}</span>
-        </div>
-        <div className="rc-meta-item">
-          <span className="lbl">Class Position</span>
-          <span className="val">{report.position ? `${report.position.rank} of ${report.position.out_of}` : (student.position ? `${student.position} in stream` : '—')}</span>
-        </div>
-      </div>
+      {/* Performance Records Section Heading */}
+      <div className="rc-section-heading">PERFORMANCE RECORDS</div>
 
       {/* Performance Table */}
       {isALevel ? (
@@ -150,28 +167,29 @@ export function SingleReportCard({ student, school }) {
           </tbody>
         </table>
       ) : (
-        /* O-Level Template matching Report_card_Template.docx:
-           SUBJECT | 20% | C2 | AVG | IDENT | DESCRIPTOR | C1 | 80% | 100% | GRADE | REMARK | TEACHER INITIALS */
+        /* O-Level Template matching the reference image:
+           SUBJECT | 20% | C1 | AVG | IDENT | DESCRIPTOR | C2 | 80% | 100% | GRADE | REMARK | TEACHER'S INITIALS */
         <table className="rc-table">
           <thead>
             <tr>
               <th style={{ width: '22%', textAlign: 'left' }}>SUBJECT</th>
               <th style={{ width: '7%' }}>20%</th>
-              <th style={{ width: '6%' }}>C2</th>
-              <th style={{ width: '7%' }}>AVG</th>
-              <th style={{ width: '7%' }}>IDENT</th>
-              <th style={{ width: '16%' }}>DESCRIPTOR</th>
-              <th style={{ width: '6%' }}>C1</th>
+              <th style={{ width: '6.5%' }}>C1</th>
+              <th style={{ width: '6.5%' }}>AVG</th>
+              <th style={{ width: '6.5%' }}>IDENT</th>
+              <th style={{ width: '15%' }}>DESCRIPTOR</th>
+              <th style={{ width: '6.5%' }}>C2</th>
               <th style={{ width: '7%' }}>80%</th>
-              <th style={{ width: '7%' }}>100%</th>
-              <th style={{ width: '6%' }}>GRADE</th>
-              <th style={{ width: '11%' }}>REMARK</th>
-              <th style={{ width: '6%' }}>INITIALS</th>
+              <th style={{ width: '7.5%' }}>100%</th>
+              <th style={{ width: '7%' }}>GRADE</th>
+              <th style={{ width: '10.5%' }}>REMARK</th>
+              <th style={{ width: '8%' }}>TEACHER'S<br />INITIALS</th>
             </tr>
           </thead>
           <tbody>
             {(() => {
               const identList = []
+              const avgList = []
               const rows = subjects.length ? subjects.map((sub, i) => {
                 const rawComps = sub.raw_components || {}
                 const comps = sub.components || {}
@@ -200,48 +218,60 @@ export function SingleReportCard({ student, school }) {
                 // C2: Mid-Term marks out of 20 converted to C2
                 const c2Raw = sub.c2 != null
                   ? Number(sub.c2)
-                  : (midVal != null ? (midVal / 20.0) * 3.0 : c1)
-                const c2 = c2Raw != null ? Number(c2Raw.toFixed(1)) : c1
+                  : (midVal != null ? (midVal / 20.0) * 3.0 : null)
+                const c2 = c2Raw != null ? Number(c2Raw.toFixed(1)) : null
 
-                // AVG: mean of C1 and C2 (or C1 if only C1)
+                // AVG: Continuous assessment average between C1 and C2
                 const avgRaw = (c1 != null && c2 != null) ? (c1 + c2) / 2.0 : (c1 != null ? c1 : c2)
                 const avg = avgRaw != null ? Number(avgRaw.toFixed(1)) : null
+                if (avg != null) avgList.push(avg)
 
                 // IDENT is AVG (or C1) rounded to nearest integer (0-1: BASIC, 2: MODERATE, 3: OUTSTANDING)
                 const subIdInfo = getIdentifierInfo(avg != null ? avg : c1)
                 if (subIdInfo.num != null) identList.push(subIdInfo.num)
 
+                const initials = sub.teacher_initials || sub.initials || 'KM'
+
                 return (
                   <tr key={i}>
                     <td className="sub-name">{sub.subject}</td>
-                    <td>{col20 != null ? col20 : '—'}</td>
-                    <td>{c2 != null ? c2 : '—'}</td>
-                    <td>{avg != null ? avg : '—'}</td>
-                    <td><b>{subIdInfo.ident}</b></td>
-                    <td style={{ fontSize: '9px', textAlign: 'center', fontWeight: 700 }}>{subIdInfo.desc}</td>
-                    <td>{c1 != null ? c1 : '—'}</td>
-                    <td>{eotVal != null ? eotVal : '—'}</td>
-                    <td><b>{final100}%</b></td>
-                    <td><b>{sub.grade}</b></td>
-                    <td>{sub.remark}</td>
-                    <td>KM</td>
+                    <td>{col20 != null ? col20 : ''}</td>
+                    <td>{c1 != null ? c1 : ''}</td>
+                    <td>{avg != null ? avg : ''}</td>
+                    <td><b>{subIdInfo.ident !== '—' ? subIdInfo.ident : ''}</b></td>
+                    <td style={{ fontSize: '9px', textAlign: 'center', fontWeight: 600 }}>{subIdInfo.desc !== '—' ? subIdInfo.desc : ''}</td>
+                    <td>{c2 != null ? c2 : ''}</td>
+                    <td>{eotVal != null ? eotVal : ''}</td>
+                    <td><b>{final100 != null ? `${final100}` : ''}</b></td>
+                    <td><b>{sub.grade || ''}</b></td>
+                    <td>{sub.remark || ''}</td>
+                    <td>{initials}</td>
                   </tr>
                 )
               }) : (
                 <tr><td colSpan={12} style={{ textAlign: 'center', padding: 12 }}>No assessment marks recorded for this term.</td></tr>
               )
 
-              const overallIdentSum = identList.length ? identList.reduce((acc, v) => acc + v, 0) : '—'
+              const overallAvgVal = report.average != null
+                ? report.average
+                : (avgList.length ? (avgList.reduce((a, b) => a + b, 0) / avgList.length).toFixed(1) : '')
 
               return (
                 <>
                   {rows}
                   <tr className="total-row">
-                    <td colSpan={8} style={{ textAlign: 'right' }}>TOTAL AVERAGE & OVERALL GRADE:</td>
-                    <td><b>{report.average != null ? `${report.average}%` : `${student.average || 0}%`}</b></td>
-                    <td><b>{report.grade || student.grade || '—'}</b></td>
-                    <td>{report.remark || '—'}</td>
-                    <td>—</td>
+                    <td style={{ fontWeight: 700, textAlign: 'left' }}>AVERAGE</td>
+                    <td></td>
+                    <td></td>
+                    <td style={{ fontWeight: 700 }}>{overallAvgVal}</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
                   </tr>
                 </>
               )
@@ -250,8 +280,8 @@ export function SingleReportCard({ student, school }) {
         </table>
       )}
 
-      {/* Summary Competency Box */}
-      {(() => {
+      {/* Summary Competency Box for A-Level */}
+      {isALevel && (() => {
         const identList = []
         subjects.forEach((sub) => {
           const rawComps = sub.raw_components || {}
@@ -287,7 +317,6 @@ export function SingleReportCard({ student, school }) {
             <div className="rc-summary-item">
               <div className="s-lbl">Overall Achievement</div>
               <div className="s-val" style={{ fontSize: '11px', lineHeight: 1.2 }}>
-                {/* OVERALL ACHIEVEMENT should not be computed, leave blank space */}
                 &nbsp;
               </div>
             </div>
@@ -295,28 +324,66 @@ export function SingleReportCard({ student, school }) {
         )
       })()}
 
-      {/* Comments & Signatures */}
-      <div className="rc-comments-box">
-        <div className="rc-comment-row">
-          <b>Class Teacher's Remark:</b>
-          <span>{report.teacher_comment || 'Satisfactory academic performance and steady class participation. Encouraged to aim higher.'}</span>
-          <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', color: '#6b7280', fontSize: '9.5px' }}>
-            <span>Signature: _______________________</span>
-            <span>Date: _______________________</span>
+      {/* Summary Strip for O-Level matching the reference image */}
+      {!isALevel && (() => {
+        const identList = []
+        subjects.forEach((sub) => {
+          const rawComps = sub.raw_components || {}
+          const comps = sub.components || {}
+          const botVal = rawComps['BOT'] != null ? Number(rawComps['BOT']) : (comps['BOT'] != null ? Number(comps['BOT']) : null)
+          const midVal = rawComps['MID'] != null ? Number(rawComps['MID']) : (rawComps['MIDTERM'] != null ? Number(rawComps['MIDTERM']) : (comps['MID'] != null ? Number(comps['MID']) : null))
+          const col20 = botVal != null ? botVal : null
+          const c1Raw = sub.c1 != null ? Number(sub.c1) : (col20 != null ? (col20 / 20.0) * 3.0 : (comps['C1'] != null ? Number(comps['C1']) : null))
+          const c1 = c1Raw != null ? Number(c1Raw.toFixed(1)) : null
+          const c2Raw = sub.c2 != null ? Number(sub.c2) : (midVal != null ? (midVal / 20.0) * 3.0 : null)
+          const c2 = c2Raw != null ? Number(c2Raw.toFixed(1)) : null
+          const avgRaw = (c1 != null && c2 != null) ? (c1 + c2) / 2.0 : (c1 != null ? c1 : c2)
+          const avg = avgRaw != null ? Number(avgRaw.toFixed(1)) : null
+          const subIdInfo = getIdentifierInfo(avg != null ? avg : c1)
+          if (subIdInfo.num != null) identList.push(subIdInfo.num)
+        })
+        const overallIdentSum = identList.length ? identList.reduce((acc, v) => acc + v, 0) : ''
+
+        return (
+          <table className="rc-summary-strip">
+            <tbody>
+              <tr>
+                <td className="strip-lbl">OVERALL IDENTIFIER</td>
+                <td className="strip-val">{overallIdentSum}</td>
+                <td className="strip-lbl">OVERALL ACHIEVEMENT</td>
+                <td className="strip-val">{report.achievement || ''}</td>
+                <td className="strip-lbl">GRADE</td>
+                <td className="strip-val">{report.grade || student.grade || ''}</td>
+              </tr>
+            </tbody>
+          </table>
+        )
+      })()}
+
+      {/* Comments & Signatures for A-Level */}
+      {isALevel && (
+        <div className="rc-comments-box">
+          <div className="rc-comment-row">
+            <b>Class Teacher's Remark:</b>
+            <span>{report.teacher_comment || 'Satisfactory academic performance and steady class participation. Encouraged to aim higher.'}</span>
+            <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', color: '#6b7280', fontSize: '9.5px' }}>
+              <span>Signature: _______________________</span>
+              <span>Date: _______________________</span>
+            </div>
+          </div>
+          <div className="rc-comment-row">
+            <b>Headteacher's Remark:</b>
+            <span>{report.head_comment || 'A commendable term\'s effort. Continue to work hard in the coming term to excel.'}</span>
+            <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', color: '#6b7280', fontSize: '9.5px' }}>
+              <span>Signature: _______________________</span>
+              <span>Date: _______________________</span>
+            </div>
           </div>
         </div>
-        <div className="rc-comment-row">
-          <b>Headteacher's Remark:</b>
-          <span>{report.head_comment || 'A commendable term\'s effort. Continue to work hard in the coming term to excel.'}</span>
-          <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', color: '#6b7280', fontSize: '9.5px' }}>
-            <span>Signature: _______________________</span>
-            <span>Date: _______________________</span>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Grading Scale Footnote */}
-      <div style={{ marginTop: 8 }}>
+      <div style={{ marginTop: 6 }}>
         {isALevel ? (
           <div>
             <div style={{ fontSize: '9.5px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>Official Grading Scale & Points:</div>
@@ -341,25 +408,24 @@ export function SingleReportCard({ student, school }) {
           </div>
         ) : (
           <div>
-            <div style={{ fontSize: '9.5px', fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>Official Grading Scale & Competency Descriptors:</div>
-            <table className="rc-grading-scale">
-              <thead>
-                <tr>
-                  {GRADING_SCALE.map((g) => <th key={g.grade}>{g.range}%</th>)}
-                </tr>
-              </thead>
+            <div className="rc-scale-title">GRADING SCALE</div>
+            <table className="rc-grade-scale-table">
               <tbody>
                 <tr>
-                  {GRADING_SCALE.map((g) => <td key={g.grade}><b>Grade {g.grade}</b> ({g.remark})</td>)}
+                  {GRADING_SCALE.map((g) => <td key={g.grade}>{g.range}</td>)}
+                </tr>
+                <tr>
+                  {GRADING_SCALE.map((g) => <td key={g.grade}><b>{g.grade}</b></td>)}
                 </tr>
               </tbody>
             </table>
-            <table className="rc-grading-scale" style={{ marginTop: 4 }}>
+
+            <table className="rc-ident-scale-table">
               <thead>
                 <tr>
-                  <th>IDENTIFIER</th>
-                  <th>SCORE RANGE</th>
-                  <th>DESCRIPTOR</th>
+                  <th style={{ width: '30%' }}>IDENTIFIER</th>
+                  <th style={{ width: '35%' }}>SCORE RANGE</th>
+                  <th style={{ width: '35%' }}>DESCRIPTION</th>
                 </tr>
               </thead>
               <tbody>
@@ -372,6 +438,24 @@ export function SingleReportCard({ student, school }) {
                 ))}
               </tbody>
             </table>
+
+            {/* Comments & Signatures matching the reference image */}
+            <div className="rc-comments-area">
+              <div className="rc-comment-line">
+                <span className="rc-comment-lead"><b>HEAD TEACHER'S COMMENT:</b></span>
+                <span className="rc-comment-text">{report.head_comment || ''}</span>
+                <span className="rc-comment-dots"></span>
+                <span className="rc-comment-sign-lbl"><b>SIGN:</b></span>
+                <span className="rc-comment-sign-dots"></span>
+              </div>
+              <div className="rc-comment-line">
+                <span className="rc-comment-lead"><b>CLASS TEACHER'S COMMENT:</b></span>
+                <span className="rc-comment-text">{report.teacher_comment || ''}</span>
+                <span className="rc-comment-dots"></span>
+                <span className="rc-comment-sign-lbl"><b>SIGN:</b></span>
+                <span className="rc-comment-sign-dots"></span>
+              </div>
+            </div>
           </div>
         )}
       </div>

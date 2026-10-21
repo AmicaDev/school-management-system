@@ -66,8 +66,8 @@ def build_report_card(student, term):
     doc = SimpleDocTemplate(
         buf,
         pagesize=A4,
-        leftMargin=12 * mm,
-        rightMargin=12 * mm,
+        leftMargin=11 * mm,
+        rightMargin=11 * mm,
         topMargin=10 * mm,
         bottomMargin=10 * mm,
         title=f"Report Card - {student.index_no}",
@@ -102,8 +102,8 @@ def build_report_card(student, term):
         "CardTitle",
         parent=st["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=9.5,
-        leading=12,
+        fontSize=9,
+        leading=11,
         alignment=1,
     )
     cell_style = ParagraphStyle("Cell", parent=st["Normal"], fontName="Helvetica", fontSize=7, leading=8.5)
@@ -118,20 +118,24 @@ def build_report_card(student, term):
     el = []
 
     # 1. School Header: Logo (Left), School Details (Center), Student Photo (Right)
-    logo_img = None
+    logo_file_path = None
     if profile.logo:
         try:
             if hasattr(profile.logo, "path") and os.path.exists(profile.logo.path):
-                logo_img = Image(profile.logo.path, 25 * mm, 25 * mm)
+                logo_file_path = profile.logo.path
         except Exception:
             pass
-    if not logo_img:
+    if not logo_file_path:
         kiyingi_logo_path = settings.MEDIA_ROOT / "school" / "kiyingi_logo.png"
         if os.path.exists(kiyingi_logo_path):
-            try:
-                logo_img = Image(str(kiyingi_logo_path), 25 * mm, 25 * mm)
-            except Exception:
-                pass
+            logo_file_path = str(kiyingi_logo_path)
+
+    logo_img = None
+    if logo_file_path:
+        try:
+            logo_img = Image(str(logo_file_path), 25 * mm, 25 * mm)
+        except Exception:
+            pass
     if not logo_img:
         logo_img = Paragraph("", cell_style)
 
@@ -157,35 +161,43 @@ def build_report_card(student, term):
         )
         photo_img = photo_table
 
-    center_html = (
-        f"<b>KIYINGI MEMORIAL SECONDARY SCHOOL</b><br/>"
-        f"3KM ALONG WABUSAANA-KYAMBOGO ROAD FROM KAKOOGE TOWNSHIP<br/>"
-        f"P.O.BOX KAMPALA UGANDA &nbsp;&nbsp;&nbsp;&nbsp; TEL: 0772511555 / 0701511555<br/>"
-        f"<i>''Search for wisdom''</i>"
-    )
+    if not is_a_level:
+        center_html = (
+            f"<font size='10.5'><b>KIYINGI MEMORIAL SECONDARY SCHOOL</b></font><br/>"
+            f"<font size='7.5'><b>3KM ALONG WABUSAANA-KYAMBOGO ROAD FROM KAKOOGE TOWNSHIP</b></font><br/>"
+            f"<font size='7.5'><b>P.O.BOX KAMPALA UGANDA &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </b>"
+            f"<font color='#0066cc'><u><b>TEL:0772511555/0701511555</b></u></font></font><br/>"
+            f"<font size='8'><b>**Search for wisdom**</b></font><br/>"
+            f"<font size='8.5'><b><u>END OF TERM {term.name.upper()} ASSESSMENT REPORT CARD {term.year.name}</u></b></font>"
+        )
+    else:
+        center_html = (
+            f"<b>KIYINGI MEMORIAL SECONDARY SCHOOL</b><br/>"
+            f"3KM ALONG WABUSAANA-KYAMBOGO ROAD FROM KAKOOGE TOWNSHIP<br/>"
+            f"P.O.BOX KAMPALA UGANDA &nbsp;&nbsp;&nbsp;&nbsp; TEL: 0772511555 / 0701511555<br/>"
+            f"<i>''Search for wisdom''</i>"
+        )
     center_p = Paragraph(center_html, school_sub_style)
 
-    header_table = Table([[logo_img, center_p, photo_img]], colWidths=[28 * mm, 130 * mm, 28 * mm])
+    header_table = Table([[logo_img, center_p, photo_img]], colWidths=[26 * mm, 136 * mm, 26 * mm])
     header_table.setStyle(
         TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("ALIGN", (0, 0), (0, 0), "CENTER"),
             ("ALIGN", (1, 0), (1, 0), "CENTER"),
             ("ALIGN", (2, 0), (2, 0), "CENTER"),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+            ("TOPPADDING", (0, 0), (-1, -1), 1),
         ])
     )
     el.append(header_table)
-    el.append(Spacer(1, 2 * mm))
+    el.append(Spacer(1, 1.5 * mm))
 
-    # 2. Report Card Title
+    # 2. Report Card Title (for A-Level only; for O-Level it is integrated in header)
     if is_a_level:
         title_text = f"<u>END OF TERM {term.name.upper()} A'LEVEL REPORT CARD {term.year.name}</u>"
-    else:
-        title_text = f"<u>END OF TERM ASSESSMENT REPORT CARD {term.year.name}</u>"
-    el.append(Paragraph(f"<b>{title_text}</b>", card_title_style))
-    el.append(Spacer(1, 2.5 * mm))
+        el.append(Paragraph(f"<b>{title_text}</b>", card_title_style))
+        el.append(Spacer(1, 2 * mm))
 
     # 3. Student Bio / Particulars
     if is_a_level:
@@ -199,29 +211,25 @@ def build_report_card(student, term):
                 Paragraph(f"<b>POINTS:</b> {summary.get('points', '—')}", cell_style),
             ],
         ]
-        info_table = Table(info_data, colWidths=[105 * mm, 81 * mm])
+        info_table = Table(info_data, colWidths=[105 * mm, 83 * mm])
     else:
         info_data = [
-            [
-                Paragraph(f"<b>NAME:</b> {student.full_name.upper()}", cell_style),
-                Paragraph(f"<b>CLASS:</b> {class_name.upper()}", cell_style),
-                Paragraph(f"<b>STREAM:</b> {stream_name.upper() or '—'}", cell_style),
-                Paragraph(f"<b>ID:</b> {student.index_no}", cell_style),
-            ]
+            [Paragraph(f"<b>NAME:</b> {student.full_name.upper()}", cell_bold)],
+            [Paragraph(f"<b>CLASS:</b> {class_name.upper()}", cell_bold)],
         ]
-        info_table = Table(info_data, colWidths=[70 * mm, 40 * mm, 38 * mm, 38 * mm])
+        info_table = Table(info_data, colWidths=[188 * mm])
 
     info_table.setStyle(
         TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 2),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-            ("LEFTPADDING", (0, 0), (-1, -1), 1),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 1),
+            ("TOPPADDING", (0, 0), (-1, -1), 1),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ])
     )
     el.append(info_table)
-    el.append(Spacer(1, 2 * mm))
+    el.append(Spacer(1, 1.5 * mm))
 
     # 4. Performance Records Title
     records_heading = Paragraph("<b>PERFORMANCE RECORDS</b>", card_title_style)
@@ -237,8 +245,8 @@ def build_report_card(student, term):
         by_subject_ass.setdefault(a.subject_id, []).append(a)
 
     if not is_a_level:
-        # O-Level columns: SUBJECT | 20% | C2 | AVG | IDENT | DESCRIPTOR | C1 | 80% | 100% | GRADE | REMARK | TEACHERS INITIALS
-        # Col widths totaling 186mm
+        # O-Level columns matching the reference image:
+        # SUBJECT | 20% | C1 | AVG | IDENT | DESCRIPTOR | C2 | 80% | 100% | GRADE | REMARK | TEACHER'S INITIALS
         col_w = [
             42 * mm,
             11 * mm,
@@ -251,21 +259,21 @@ def build_report_card(student, term):
             12 * mm,
             12 * mm,
             18 * mm,
-            11 * mm,
+            13 * mm,
         ]
         headers = [
             Paragraph("<b>SUBJECT</b>", cell_bold),
             Paragraph("<b>20%</b>", cell_center_bold),
-            Paragraph("<b>C2</b>", cell_center_bold),
+            Paragraph("<b>C1</b>", cell_center_bold),
             Paragraph("<b>AVG</b>", cell_center_bold),
             Paragraph("<b>IDENT</b>", cell_center_bold),
             Paragraph("<b>DESCRIPTOR</b>", cell_center_bold),
-            Paragraph("<b>C1</b>", cell_center_bold),
+            Paragraph("<b>C2</b>", cell_center_bold),
             Paragraph("<b>80%</b>", cell_center_bold),
             Paragraph("<b>100%</b>", cell_center_bold),
             Paragraph("<b>GRADE</b>", cell_center_bold),
             Paragraph("<b>REMARK</b>", cell_center_bold),
-            Paragraph("<b>TR INIT</b>", cell_center_bold),
+            Paragraph("<b>TEACHER'S<br/>INITIALS</b>", cell_center_bold),
         ]
         table_rows = [headers]
 
@@ -292,7 +300,7 @@ def build_report_card(student, term):
                 col_20_str = f"{col_20_val:g}"
             else:
                 col_20_val = None
-                col_20_str = "-"
+                col_20_str = ""
                 c1_num = None
 
             # Mid-Term marks out of 20 converted to C2: ((mid_ass.score / 20) * 3)
@@ -300,7 +308,7 @@ def build_report_card(student, term):
             if mid_ass:
                 c2_num = round((float(mid_ass.score) / 20.0) * 3.0, 1)
             else:
-                c2_num = c1_num
+                c2_num = None
 
             # AVG: Continuous assessment average between C1 and C2
             if c1_num is not None and c2_num is not None:
@@ -318,7 +326,7 @@ def build_report_card(student, term):
                 col_80_str = f"{col_80_val:g}"
             else:
                 col_80_val = None
-                col_80_str = "-"
+                col_80_str = ""
 
             # 100% Final Results: BOT (out of 20) + End of term (out of 80) = FINAL RESULTS out of 100
             # Mid-Term is NOT included in this total
@@ -334,8 +342,6 @@ def build_report_card(student, term):
             tot_str = f"{tot_num:.1f}" if tot_num % 1 != 0 else f"{int(tot_num)}"
 
             # Identifier (IDENT) & Descriptor Rule:
-            # IDENT is the value of AVG (or C1) rounded to nearest Integer... written as 1, 2 or 3 as calculated.
-            # If IDENT is 0-1, DESCRIPTOR = BASIC; IDENT is 2, DESCRIPTOR = MODERATE; IDENT is 3, DESCRIPTOR = OUTSTANDING.
             active_ident_val = avg_num if avg_num is not None else c1_num
             if active_ident_val is not None:
                 ident_int = int(round(active_ident_val))
@@ -350,8 +356,8 @@ def build_report_card(student, term):
                     desc = "OUTSTANDING"
                 ident_values.append(ident)
             else:
-                ident = "-"
-                desc = "-"
+                ident = ""
+                desc = ""
 
             grade, remark = _grade_and_remark(tot_num)
             initials = teacher_initials.get(sid, "")
@@ -359,11 +365,11 @@ def build_report_card(student, term):
             table_rows.append([
                 Paragraph(r["subject"], cell_style),
                 Paragraph(col_20_str, cell_center),
-                Paragraph(f"{c2_num:g}" if c2_num is not None else "-", cell_center),
-                Paragraph(f"{avg_num:g}" if avg_num is not None else "-", cell_center),
+                Paragraph(f"{c1_num:g}" if c1_num is not None else "", cell_center),
+                Paragraph(f"{avg_num:g}" if avg_num is not None else "", cell_center),
                 Paragraph(str(ident), cell_center_bold),
                 Paragraph(desc, cell_center),
-                Paragraph(f"{c1_num:g}" if c1_num is not None else "-", cell_center),
+                Paragraph(f"{c2_num:g}" if c2_num is not None else "", cell_center),
                 Paragraph(col_80_str, cell_center),
                 Paragraph(tot_str, cell_center_bold),
                 Paragraph(grade, cell_center_bold),
@@ -371,42 +377,40 @@ def build_report_card(student, term):
                 Paragraph(initials, cell_center),
             ])
 
-        # Overall / Total Average Row
+        # Overall / Total Average Row matching the reference image:
+        # Col 1: AVERAGE, Col 4: overall average, other cells blank with grid borders
         overall_avg = round(sum(total_marks) / len(total_marks), 1) if total_marks else 0
         overall_grade, overall_remark = _grade_and_remark(overall_avg)
 
         # OVERALL IDENTIFIER = Sum of all subjects IDENT for a particular student.
-        overall_ident = sum(ident_values) if ident_values else "-"
+        overall_ident = sum(ident_values) if ident_values else ""
         # OVERALL ACHIEVEMENT should not be computed, leave blank space
         overall_achieve = ""
 
-        # Total Average row spans columns
         table_rows.append([
-            Paragraph("<b>TOTAL AVERAGE</b>", cell_bold),
-            Paragraph(f"<b>{overall_avg:g}</b>", cell_center_bold),
-            Paragraph("", cell_style),
-            Paragraph("", cell_style),
-            Paragraph("", cell_style),
-            Paragraph("", cell_style),
+            Paragraph("<b>AVERAGE</b>", cell_bold),
             Paragraph("", cell_style),
             Paragraph("", cell_style),
             Paragraph(f"<b>{overall_avg:g}</b>", cell_center_bold),
-            Paragraph(f"<b>{overall_grade}</b>", cell_center_bold),
-            Paragraph(f"<b>{overall_remark}</b>", cell_center_bold),
+            Paragraph("", cell_style),
+            Paragraph("", cell_style),
+            Paragraph("", cell_style),
+            Paragraph("", cell_style),
+            Paragraph("", cell_style),
+            Paragraph("", cell_style),
+            Paragraph("", cell_style),
             Paragraph("", cell_style),
         ])
 
         perf_table = Table(table_rows, colWidths=col_w, repeatRows=1)
         perf_table.setStyle(
             TableStyle([
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f4f8")),
-                ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f8fafc")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, -1), 2),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-                ("LEFTPADDING", (0, 0), (-1, -1), 2),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+                ("TOPPADDING", (0, 0), (-1, -1), 1.5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 1.5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 1.5),
             ])
         )
         el.append(perf_table)
@@ -423,36 +427,30 @@ def build_report_card(student, term):
                 Paragraph(overall_grade, cell_center_bold),
             ]
         ]
-        sum_table = Table(summary_row, colWidths=[40 * mm, 20 * mm, 45 * mm, 35 * mm, 22 * mm, 24 * mm])
+        sum_table = Table(summary_row, colWidths=[42 * mm, 21 * mm, 45 * mm, 26 * mm, 27 * mm, 27 * mm])
         sum_table.setStyle(
             TableStyle([
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f0f4f8")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("TOPPADDING", (0, 0), (-1, -1), 2),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
             ])
         )
         el.append(sum_table)
-        el.append(Spacer(1, 2.5 * mm))
+        el.append(Spacer(1, 2 * mm))
 
-        # Grading Scales (Side by Side or Stacked)
+        # Grading Scales
         grade_scale_title = Paragraph("<b>GRADING SCALE</b>", card_title_style)
         el.append(grade_scale_title)
         el.append(Spacer(1, 1 * mm))
 
-        # Table 1: Grade Scale
-        # 80-100 | 70-79 | 60-69 | 50-59 | 0-49
-        # A      | B     | C     | D     | E
-        # Table 2: Identifier Scale
-        # IDENTIFIER | SCORE RANGE | DESCRIPTION
         scale1_data = [
             [
-                Paragraph("<b>80-100</b>", cell_center),
-                Paragraph("<b>70-79</b>", cell_center),
-                Paragraph("<b>60-69</b>", cell_center),
-                Paragraph("<b>50-59</b>", cell_center),
-                Paragraph("<b>0-49</b>", cell_center),
+                Paragraph("80-100", cell_center),
+                Paragraph("70-79", cell_center),
+                Paragraph("60-69", cell_center),
+                Paragraph("50-59", cell_center),
+                Paragraph("0-49", cell_center),
             ],
             [
                 Paragraph("<b>A</b>", cell_center_bold),
@@ -462,11 +460,10 @@ def build_report_card(student, term):
                 Paragraph("<b>E</b>", cell_center_bold),
             ],
         ]
-        scale1_table = Table(scale1_data, colWidths=[37 * mm, 37 * mm, 37 * mm, 37 * mm, 38 * mm])
+        scale1_table = Table(scale1_data, colWidths=[30 * mm, 30 * mm, 30 * mm, 30 * mm, 30 * mm], hAlign="CENTER")
         scale1_table.setStyle(
             TableStyle([
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f4f8")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("TOPPADDING", (0, 0), (-1, -1), 1.5),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
@@ -481,48 +478,42 @@ def build_report_card(student, term):
                 Paragraph("<b>SCORE RANGE</b>", cell_center_bold),
                 Paragraph("<b>DESCRIPTION</b>", cell_center_bold),
             ],
-            [Paragraph("3", cell_center), Paragraph("2.5 - 3.0", cell_center), Paragraph("OUTSTANDING", cell_center)],
-            [Paragraph("2", cell_center), Paragraph("1.5 - 2.4", cell_center), Paragraph("MODERATE", cell_center)],
-            [Paragraph("1", cell_center), Paragraph("1.0 - 1.4", cell_center), Paragraph("BASIC", cell_center)],
+            [Paragraph("3", cell_center_bold), Paragraph("2.5 - 3.0", cell_center), Paragraph("OUTSTANDING", cell_center)],
+            [Paragraph("2", cell_center_bold), Paragraph("1.5 - 2.4", cell_center), Paragraph("MODERATE", cell_center)],
+            [Paragraph("1", cell_center_bold), Paragraph("1.0 - 1.4", cell_center), Paragraph("BASIC", cell_center)],
         ]
-        scale2_table = Table(scale2_data, colWidths=[50 * mm, 68 * mm, 68 * mm])
+        scale2_table = Table(scale2_data, colWidths=[50 * mm, 69 * mm, 69 * mm])
         scale2_table.setStyle(
             TableStyle([
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f4f8")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("TOPPADDING", (0, 0), (-1, -1), 1),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
             ])
         )
         el.append(scale2_table)
-        el.append(Spacer(1, 2.5 * mm))
+        el.append(Spacer(1, 2 * mm))
 
-        # Comments
+        # Comments & Signatures matching the reference image layout
         head_cmnt = (comment.head_comment if comment else "") or ""
         cls_cmnt = (comment.teacher_comment if comment else "") or ""
+        cmnt_style = ParagraphStyle("Cmnt", parent=st["Normal"], fontName="Helvetica", fontSize=7.5, leading=9.5)
 
         el.append(
             Paragraph(
                 f"<b>HEAD TEACHER'S COMMENT:</b> {head_cmnt}"
-                + (
-                    "<br/>.........................................................................................................................................................................................."
-                    if not head_cmnt
-                    else ""
-                ),
-                cell_style,
+                + (" ....................................................................................................................................... " if not head_cmnt else " ")
+                + "<b>SIGN:</b> .....................................................",
+                cmnt_style,
             )
         )
         el.append(Spacer(1, 2 * mm))
         el.append(
             Paragraph(
                 f"<b>CLASS TEACHER'S COMMENT:</b> {cls_cmnt}"
-                + (
-                    "<br/>.........................................................................................................................................................................................."
-                    if not cls_cmnt
-                    else ""
-                ),
-                cell_style,
+                + (" ....................................................................................................................................... " if not cls_cmnt else " ")
+                + "<b>SIGN:</b> .....................................................",
+                cmnt_style,
             )
         )
 
@@ -695,6 +686,33 @@ def build_report_card(student, term):
             )
         )
 
-    doc.build(el)
+    def draw_page_decorations(canvas, _doc):
+        canvas.saveState()
+        # 1. Background Watermark (Crest)
+        if logo_file_path and os.path.exists(logo_file_path):
+            try:
+                canvas.setFillAlpha(0.08)
+                canvas.drawImage(
+                    str(logo_file_path),
+                    52.5 * mm,
+                    96 * mm,
+                    105 * mm,
+                    105 * mm,
+                    mask="auto",
+                    preserveAspectRatio=True,
+                )
+            except Exception:
+                pass
+
+        # 2. Outer double blue frame matching the reference design
+        border_color = colors.HexColor("#104a8e")
+        canvas.setStrokeColor(border_color)
+        canvas.setLineWidth(2.2)
+        canvas.rect(6 * mm, 6 * mm, 198 * mm, 285 * mm)
+        canvas.setLineWidth(0.8)
+        canvas.rect(7.8 * mm, 7.8 * mm, 194.4 * mm, 281.4 * mm)
+        canvas.restoreState()
+
+    doc.build(el, onFirstPage=draw_page_decorations, onLaterPages=draw_page_decorations)
     buf.seek(0)
     return buf

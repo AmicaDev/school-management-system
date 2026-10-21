@@ -209,25 +209,291 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 .report-card-modal-backdrop { position: fixed; inset: 0; background: rgba(10, 20, 35, .7); z-index: 100; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; align-items: center; }
 .report-card-toolbar { position: sticky; top: 0; z-index: 101; background: var(--surface); padding: 12px 20px; border-radius: var(--r-md); box-shadow: var(--shadow-2); display: flex; gap: 12px; align-items: center; margin-bottom: 20px; width: min(860px, 100%); }
 .report-card-print-container { width: min(860px, 100%); display: flex; flex-direction: column; gap: 24px; }
-.report-card-print-page { background: #ffffff !important; color: #111827 !important; border: 2px solid #222; border-radius: 4px; padding: 20px 24px; box-shadow: var(--shadow-2); font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; line-height: 1.35; }
-.rc-header { display: grid; grid-template-columns: 85px 1fr 85px; gap: 12px; align-items: center; border-bottom: 2px solid #222; padding-bottom: 10px; margin-bottom: 10px; }
-.rc-logo { width: 85px; height: 85px; object-fit: contain; }
-.rc-title-area { text-align: center; }
-.rc-school-name { font-size: 18px; font-weight: 800; color: #111827; margin: 0 0 2px; letter-spacing: 0.5px; }
-.rc-school-meta { font-size: 11px; color: #374151; margin: 0 0 2px; }
-.rc-motto { font-size: 11px; font-weight: 700; color: #1d4f91; font-style: italic; margin: 2px 0 0; }
-.rc-photo { width: 85px; height: 95px; object-fit: cover; border: 1.5px solid #374151; border-radius: 3px; display: block; margin-left: auto; }
-.rc-photo-placeholder { width: 85px; height: 95px; border: 1.5px dashed #9ca3af; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #6b7280; text-align: center; margin-left: auto; background: #f9fafb; }
+.report-card-print-page {
+  position: relative;
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 3.5px solid #104a8e;
+  border-radius: 0;
+  padding: 14px 18px;
+  box-shadow: var(--shadow-2);
+  font-family: Arial, 'Segoe UI', Helvetica, sans-serif;
+  font-size: 10.5px;
+  line-height: 1.25;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+/* Inner line of the double blue border */
+.report-card-print-page::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  right: 3px;
+  bottom: 3px;
+  border: 1px solid #104a8e;
+  pointer-events: none;
+  z-index: 10;
+}
+/* Watermark school badge centered in background */
+.report-card-print-page::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 380px;
+  height: 380px;
+  background-image: url('/kiyingi_logo.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: 0;
+}
+.report-card-print-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Header */
+.rc-header {
+  display: grid;
+  grid-template-columns: 85px 1fr 85px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.rc-logo {
+  width: 82px;
+  height: 82px;
+  object-fit: contain;
+  display: block;
+}
+.rc-title-area {
+  text-align: center;
+}
+.rc-school-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #000000;
+  margin: 0 0 2px;
+  letter-spacing: 0.3px;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.rc-school-location {
+  font-size: 9px;
+  font-weight: 700;
+  color: #000000;
+  margin: 0 0 2px;
+  letter-spacing: 0.2px;
+}
+.rc-school-meta {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #000000;
+  margin: 0 0 2px;
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+.rc-school-phone {
+  color: #0066cc !important;
+  text-decoration: underline !important;
+  font-weight: 700;
+}
+.rc-motto {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #000000;
+  margin: 2px 0 3px;
+  font-family: "Times New Roman", Times, serif;
+}
+.rc-term-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #000000;
+  margin-top: 2px;
+  text-decoration: underline;
+  letter-spacing: 0.3px;
+}
+.rc-photo {
+  width: 82px;
+  height: 98px;
+  object-fit: cover;
+  border: 1px solid #000000;
+  display: block;
+  margin-left: auto;
+}
+.rc-photo-placeholder {
+  width: 82px;
+  height: 98px;
+  border: 1px solid #999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #666666;
+  text-align: center;
+  margin-left: auto;
+  background: #fafafa;
+}
+
+/* Student Bio & Section Titles */
+.rc-student-bio {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  margin: 4px 0 6px;
+  color: #000000;
+}
+.rc-section-heading {
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #000000;
+  margin: 4px 0 4px;
+}
+
+/* Performance Table */
+.rc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 6px;
+  font-size: 9.5px;
+  background: transparent;
+}
+.rc-table th, .rc-table td {
+  border: 1px solid #000000;
+  padding: 2.5px 3px;
+  text-align: center;
+  color: #000000;
+  line-height: 1.15;
+}
+.rc-table th {
+  font-weight: 800;
+  background: transparent;
+  font-size: 9px;
+}
+.rc-table td.sub-name {
+  text-align: left;
+  font-weight: 600;
+  padding-left: 4px;
+}
+.rc-table tr.total-row td {
+  font-weight: 800;
+  background: transparent;
+}
+
+/* Summary Strip */
+.rc-summary-strip {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+  font-size: 9.5px;
+  background: transparent;
+}
+.rc-summary-strip td {
+  border: 1px solid #000000;
+  padding: 3px 6px;
+  color: #000000;
+}
+.rc-summary-strip .strip-lbl {
+  font-weight: 800;
+  white-space: nowrap;
+}
+.rc-summary-strip .strip-val {
+  font-weight: 800;
+  text-align: center;
+}
+
+/* Grading Scales */
+.rc-scale-title {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #000000;
+  margin: 6px 0 3px;
+  letter-spacing: 0.5px;
+}
+.rc-grade-scale-table {
+  width: 82%;
+  margin: 0 auto 6px;
+  border-collapse: collapse;
+  font-size: 9px;
+  background: transparent;
+}
+.rc-grade-scale-table td {
+  border: 1px solid #000000;
+  padding: 2px 4px;
+  text-align: center;
+  color: #000000;
+}
+.rc-ident-scale-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+  font-size: 9px;
+  background: transparent;
+}
+.rc-ident-scale-table th, .rc-ident-scale-table td {
+  border: 1px solid #000000;
+  padding: 2px 4px;
+  text-align: center;
+  color: #000000;
+}
+.rc-ident-scale-table th {
+  font-weight: 800;
+  background: transparent;
+}
+
+/* Comments & Signatures */
+.rc-comments-area {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 9.5px;
+  color: #000000;
+}
+.rc-comment-line {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  width: 100%;
+}
+.rc-comment-lead {
+  white-space: nowrap;
+}
+.rc-comment-text {
+  flex-shrink: 0;
+}
+.rc-comment-dots {
+  flex-grow: 1;
+  border-bottom: 1.5px dotted #000000;
+  margin: 0 4px;
+  min-width: 60px;
+}
+.rc-comment-sign-lbl {
+  white-space: nowrap;
+  margin-left: 8px;
+}
+.rc-comment-sign-dots {
+  width: 120px;
+  border-bottom: 1.5px dotted #000000;
+  margin-left: 4px;
+}
+
+/* A-Level Legacy styles retained for A-Level view */
 .rc-card-banner { background: #1d4f91; color: #ffffff; text-align: center; font-weight: 800; font-size: 13px; padding: 4px; letter-spacing: 1px; margin-bottom: 10px; }
 .rc-meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 12px; background: #f3f4f6; border: 1px solid #d1d5db; padding: 8px 12px; margin-bottom: 12px; font-size: 11px; }
 .rc-meta-item { display: flex; flex-direction: column; }
 .rc-meta-item .lbl { font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; }
 .rc-meta-item .val { font-weight: 700; color: #111827; }
-.rc-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10px; }
-.rc-table th, .rc-table td { border: 1px solid #374151; padding: 4px 6px; text-align: center; }
-.rc-table th { background: #e5e7eb; font-weight: 800; color: #111827; text-transform: uppercase; font-size: 9.5px; }
-.rc-table td.sub-name { text-align: left; font-weight: 600; }
-.rc-table tr.total-row { background: #f3f4f6; font-weight: 800; }
 .rc-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; background: #f9fafb; border: 1px solid #e5e7eb; padding: 8px 12px; }
 .rc-summary-item { text-align: center; }
 .rc-summary-item .s-lbl { font-size: 9.5px; color: #4b5563; font-weight: 700; text-transform: uppercase; }
@@ -240,16 +506,82 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 .rc-grading-scale th { background: #f3f4f6; font-weight: 700; }
 
 @media print {
-  @page { size: A4 portrait; margin: 10mm 12mm; }
-  body { background: #ffffff !important; color: #000000 !important; }
-  .sidebar, .topbar, .overlay, .no-print, button, nav, .btn, .tabs, .sync-bar, .update-bar, form, .report-card-toolbar { display: none !important; }
-  .shell { display: block !important; }
-  .main { margin: 0 !important; padding: 0 !important; }
-  .panel { border: none !important; box-shadow: none !important; padding: 0 !important; background: transparent !important; }
-  .report-card-modal-backdrop { position: static !important; background: transparent !important; padding: 0 !important; display: block !important; }
-  .report-card-print-container { width: 100% !important; margin: 0 !important; }
-  .report-card-print-page { border: 1.5px solid #000 !important; box-shadow: none !important; page-break-after: always !important; break-after: page !important; margin-bottom: 0 !important; }
-  .report-card-print-page:last-child { page-break-after: auto !important; break-after: auto !important; }
+  @page {
+    size: A4 portrait;
+    margin: 6mm 8mm;
+  }
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .sidebar, .topbar, .overlay, .no-print, button, nav, .btn, .tabs, .sync-bar, .update-bar, form, .report-card-toolbar {
+    display: none !important;
+  }
+  .shell {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .panel {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+  .report-card-modal-backdrop {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+  .report-card-print-container {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+  .report-card-print-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 280mm !important;
+    box-sizing: border-box !important;
+    border: 3.5px solid #104a8e !important;
+    box-shadow: none !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin: 0 !important;
+    padding: 12px 16px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .report-card-print-page::after {
+    border: 1px solid #104a8e !important;
+  }
+  .report-card-print-page::before {
+    opacity: 0.08 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .rc-school-phone {
+    color: #0066cc !important;
+    text-decoration: underline !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .report-card-print-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
 }
 
 /* ===== Splash screen ===== */
