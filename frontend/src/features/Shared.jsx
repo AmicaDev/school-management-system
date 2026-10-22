@@ -276,6 +276,8 @@ export function ClassResults({ downloads = true }) {
         <Skeleton rows={6} />
       ) : res.error ? (
         <ErrorState message={res.error} onRetry={res.reload} />
+      ) : res.data == null ? (
+        <Skeleton rows={6} />
       ) : !res.data.length ? (
         <Empty title="No students in this stream" />
       ) : viewMode === 'detailed' ? (
