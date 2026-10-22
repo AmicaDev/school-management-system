@@ -19,16 +19,19 @@ def _gender(qs):
 @api_view(["GET"])
 @permission_classes([IsAdmin])
 def admin_overview(request):
-    term, year = request.query_params.get("term"), request.query_params.get("year")
-    key = f"overview:{year}:{term}"
+    term = request.query_params.get("term") or None
+    year = request.query_params.get("year") or None
+    key = f"overview:{year or 'none'}:{term or 'none'}"
     data = cache.get(key)
     if data is None:
         att = AttendanceRecord.objects.all()
         ass = Assessment.objects.all()
         if term:
-            att, ass = att.filter(term_id=term), ass.filter(term_id=term)
-        elif year:
-            att, ass = att.filter(term__year_id=year), ass.filter(term__year_id=year)
+            att = att.filter(term_id=term)
+            ass = ass.filter(term_id=term)
+        if year:
+            att = att.filter(term__year_id=year)
+            ass = ass.filter(term__year_id=year)
         data = {
             "students": _gender(Student.objects.filter(is_archived=False)),
             "teachers": _gender(TeacherProfile.objects.filter(is_archived=False)),

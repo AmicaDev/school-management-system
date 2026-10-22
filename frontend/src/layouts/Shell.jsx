@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useApp } from '../contexts/AppContext'
 import { api, mediaUrl } from '../services/api'
-import { Skeleton } from '../components/ui'
+import { Skeleton, Tabs } from '../components/ui'
 
 export const NAVS = {
   ADMIN: [
@@ -27,7 +27,7 @@ export const NAVS = {
   DEVELOPER: [
     ['Dashboard', '/developer', '▦', true], ['Errors', '/developer/errors', '🐞'], ['Logs', '/developer/logs', '📜'], ['Tests', '/developer/tests', '🧪'],
     ['Database', '/developer/database', '🗄'], ['API', '/developer/api', '🔌'], ['PWA', '/developer/pwa', '📲'], ['Sync', '/developer/sync', '🔄'],
-    ['Admin accounts', '/developer/admin-accounts', '🔑'], ['Maintenance', '/developer/maintenance', '🛠'], ['Updates', '/developer/updates', '⬆'], ['Audit', '/developer/audit', '🛡'],
+    ['Admin accounts', '/developer/admin-accounts', '🔑'], ['Maintenance', '/developer/maintenance', '🛠'], ['Updates', '/developer/updates', '⬆'], ['Backup', '/developer/backup', '💾'], ['Audit', '/developer/audit', '🛡'],
   ],
 }
 
@@ -56,6 +56,24 @@ export default function Shell() {
 
   const title = nav.filter((n) => n[0] !== 'sec').reduce((best, n) => (loc.pathname.startsWith(n[1]) && (!best || n[1].length > best[1].length) ? n : best), null)?.[0] || 'Student'
   const submitSearch = (e) => { e.preventDefault(); navigate(user.role === 'ADMIN' ? `/admin/students?q=${encodeURIComponent(q)}` : `/teacher/classes?q=${encodeURIComponent(q)}`) }
+
+  // Bottom tabs for smartphones: Reports, Teachers, Attendance, Results
+  const MOBILE_TABS = [
+    { label: 'Teachers', to: '/admin/teachers', icon: '👩‍🏫' },
+    { label: 'Attendance', to: '/admin/attendance', icon: '✔' },
+    { label: 'Results', to: '/admin/results', icon: '📝' },
+    { label: 'Reports', to: '/admin/reports', icon: '🖨' },
+  ]
+  const activeTab = MOBILE_TABS.find((t) => loc.pathname === t.to || loc.pathname.startsWith(t.to + '/'))?.label
+
+  const isMobile = () => window.matchMedia('(max-width: 768px)').matches
+  const [mobile, setMobile] = useState(isMobile())
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 768px)')
+    const handler = () => setMobile(mql.matches)
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [])
 
   return (
     <div className={`shell${collapsed ? ' collapsed' : ''}${dev ? ' dev-shell' : ''}`}>
@@ -89,6 +107,20 @@ export default function Shell() {
         </header>
         <main className="content"><Suspense fallback={<Skeleton rows={6} />}><Outlet /></Suspense></main>
       </div>
+      {mobile && user.role === 'ADMIN' && (
+        <nav className="bottom-tabs" aria-label="Quick navigation">
+          {MOBILE_TABS.map((t) => {
+            const isActive = activeTab === t.label
+            const cls = `bottom-tab${isActive ? ' active' : ''}`
+            return (
+              <a key={t.label} href={t.to} onClick={(e) => { e.preventDefault(); navigate(t.to) }} className={cls} aria-current={isActive ? 'page' : undefined}>
+                <span className="bottom-tab-icon" aria-hidden>{t.icon}</span>
+                <span className="bottom-tab-label">{t.label}</span>
+              </a>
+            )
+          })}
+        </nav>
+      )}
     </div>
   )
 }

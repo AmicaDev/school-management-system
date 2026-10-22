@@ -1,14 +1,20 @@
 import platform
 import time
+import os
+import gzip
+import json
+from datetime import datetime
 
 import django
 import rest_framework
 from django.conf import settings
 from django.core.cache import cache
 from django.core.management import call_command
+from django.core.management import CommandError
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.db.models import Count, Sum
+from django.http import FileResponse, Http404
 from rest_framework import serializers, viewsets
 from rest_framework.decorators import action, api_view, authentication_classes, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
@@ -242,3 +248,53 @@ def maintenance(request):
         return Response({"detail": "Unknown action."}, status=400)
     audit(request, act.upper(), "developer", out)
     return Response({"detail": out})
+
+
+BACKUP_DIR = os.path.join(settings.MEDIA_ROOT, "backups")
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsDeveloper])
+def backup(request):
+    """List available backups (GET) or create a new backup (POST)."""
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    if request.method == "GET":
+        backups = []
+        for name in sorted(os.listdir(BACKUP_DIR)):
+            path = os.path.join(BACKUP_DIR, name)
+            if not os.path.isfile(path):
+                continue
+            stat = os.stat(path)
+            backups.append({
+                "name": name,
+                "size_bytes": stat.st_size,
+                "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                "download_url": f"/api/v1/developer/backup/download/{name}/",
+            })
+        return Response({"backups": backups})
+
+    try:
+        call_command("dbbackup", output="", verbosity=0)
+    except CommandError as e:
+        return Response({"detail": f"Backup failed: {e}"}, status=500)
+
+    # Return the most recent backup
+    files = sorted(os.listdir(BACKUP_DIR), key=lambda n: os.path.getctime(os.path.join(BACKUP_DIR, n)), reverse=True)
+    if not files:
+        return Response({"detail": "Backup created but no file found."}, status=500)
+    latest = files[0]
+    return Response({"detail": "Backup created.", "backup": {
+        "name": latest,
+        "size_bytes": os.path.getsize(os.path.join(BACKUP_DIR, latest)),
+        "download_url": f"/api/v1/developer/backup/download/{latest}/",
+    }})
+
+
+@api_view(["GET"])
+@permission_classes([IsDeveloper])
+def backup_download(request, filename):
+    """Download a backup file."""
+    path = os.path.join(BACKUP_DIR, filename)
+    if not os.path.isfile(path) or ".." in filename or filename.startswith("/"):
+        raise Http404
+    return FileResponse(open(path, "rb"), as_attachment=True, filename=filename, content_type="application/gzip")

@@ -15,6 +15,8 @@ urlpatterns = [
     path("sync/", views.sync_status),
     path("updates/", views.updates),
     path("maintenance/", views.maintenance),
+    path("backup/", views.backup),
+    path("backup/download/<path:filename>/", views.backup_download),
     path("client-errors/", views.client_error),
     path("", include(router.urls)),
 ]

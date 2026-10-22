@@ -121,6 +121,12 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
   .menu-btn { display: inline-block; } .topbar { padding: 0 var(--sp-3); } .topbar .search { display: none; } .collapse-btn { display: none; }
   .nav-link { min-height: 48px; } .btn { min-height: 44px; } .table th, .table td { padding: var(--sp-2) var(--sp-3); }
   .panel { padding: var(--sp-4); border-radius: var(--r-md); }
+  .content { padding-bottom: 80px; }
+  .bottom-tabs { position: fixed; left: 0; right: 0; bottom: calc(var(--safe-b) + 8px); display: flex; justify-content: space-around; align-items: center; height: 56px; background: var(--surface); border: 1px solid var(--border); border-top: 0; border-radius: var(--r-lg) var(--r-lg) 0 0; z-index: var(--z-topbar); box-shadow: var(--shadow-2); padding: 0 var(--sp-2); }
+  .bottom-tab { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 6px 4px; border: 0; background: none; color: var(--muted); font-size: 10px; font-weight: 600; cursor: pointer; text-decoration: none; }
+  .bottom-tab.active { color: var(--primary); }
+  .bottom-tab-icon { font-size: 18px; line-height: 1; }
+  .bottom-tab-label { line-height: 1; }
 }
 
 /* ===== Public site ===== */

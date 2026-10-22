@@ -279,3 +279,45 @@ export function DevUpdates() {
     <section className="panel"><h2>Database migration state</h2><div className="pre">{latest.join('\n') || '—'}</div>{data.migrations.pending.length ? <Alert kind="warning">Pending migrations: {data.migrations.pending.join(', ')}</Alert> : <Alert kind="success">All migrations applied.</Alert>}</section>
     <Alert kind="info">{data.note}</Alert></div>
 }
+
+export function DevBackup() {
+  const { data, loading, error, reload } = useFetch('/developer/backup/')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState({ kind: 'info', text: '' })
+  const backups = items(data)
+
+  const create = async () => {
+    setBusy(true); setNotice({ kind: 'info', text: '' })
+    try {
+      const { data: res } = await api.post('/developer/backup/')
+      setNotice({ kind: 'success', text: res.detail })
+      reload()
+    } catch (e) {
+      setNotice({ kind: 'error', text: errorMessage(e) })
+    } finally { setBusy(false) }
+  }
+
+  const sizeMB = (b) => (b == null ? '—' : `${(b / (1024 * 1024)).toFixed(2)} MB`)
+
+  return (
+    <div className="stack">
+      <section className="panel">
+        <div className="panel-head"><h2>System data backup</h2><div className="row spread">
+          <button className="btn primary" disabled={busy} onClick={create}>{busy ? 'Creating backup…' : 'Create backup now'}</button>
+          <button className="btn" onClick={reload} disabled={loading}>Refresh</button></div></div>
+        <Alert kind={notice.kind}>{notice.text}</Alert>
+        {loading ? <Skeleton rows={3} /> : error ? <ErrorState message={error} onRetry={reload} /> :
+         !backups.length ? <Empty title="No backups yet">Create your first system backup above. Backups are stored as gzipped JSON on the server.</Empty> :
+         <div className="stack">
+           <p className="muted">Each backup contains every school record (students, staff, attendance, results, timetable, users, configuration). Download to keep an off-server copy.</p>
+           <Table columns={[
+             { key: 'name', label: 'Backup file' },
+             { key: 'size_bytes', label: 'Size', render: (r) => sizeMB(r.size_bytes) },
+             { key: 'created_at', label: 'Created', render: (r) => fmtDateTime(r.created_at) },
+             { key: 'action', label: '', render: (r) => <a className="btn sm" href={r.download_url} download={r.name}>⬇ Download</a> },
+           ]} rows={backups} />
+         </div>}
+      </section>
+    </div>
+  )
+}
