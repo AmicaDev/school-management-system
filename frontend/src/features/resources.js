@@ -1,4 +1,4 @@
-import { Badge, fmtDate, fmtDateTime } from '../components/ui'
+import { Badge, fmtDate, fmtDateTime, TeacherCodeCell } from '../components/ui'
 import { createElement as h } from 'react'
 
 const GENDER = [['M', 'Male'], ['F', 'Female']]
@@ -41,8 +41,10 @@ export const R = {
   },
   teachers: {
     title: 'Teachers', singular: 'teacher', endpoint: '/teachers/', removeLabel: 'Archive', canPermanentDelete: true, params: {},
-    columns: [{ key: 'full_name', label: 'Name' }, { key: 'username', label: 'Username' }, { key: 'phone', label: 'Phone' },
-      { key: 'assignments', label: 'Subjects', render: (r) => [...new Set(r.assignments.map((a) => a.code))].join(', ') || '—' },
+    columns: [{ key: 'full_name', label: 'Name' }, { key: 'username', label: 'Username' },
+      { key: 'signin_code', label: 'Sign-in code', render: (r) => h(TeacherCodeCell, { code: r.signin_code }) },
+      { key: 'phone', label: 'Phone' },
+      { key: 'assignments', label: 'Subjects', render: (r) => [...new Set((r.assignments || []).map((a) => a.code))].join(', ') || '—' },
       { key: 'is_archived', label: 'Status', render: (r) => (r.is_archived ? 'Archived' : 'Active') }],
     filters: [{ name: 'gender', label: 'All genders', options: GENDER }],
     fields: [{ name: 'username', label: 'Username', required: true }, { name: 'first_name', label: 'First name', required: true }, { name: 'last_name', label: 'Last name', required: true },

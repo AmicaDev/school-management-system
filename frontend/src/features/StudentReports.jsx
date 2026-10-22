@@ -37,6 +37,21 @@ function getIdentifierInfo(c1) {
   return { ident: 3, desc: 'OUTSTANDING', num: 3 }
 }
 
+function gradePreview(tot) {
+  if (tot == null || tot === '' || tot === '-' || tot === '—') return ''
+  const n = Number(String(tot).replace('%', ''))
+  if (isNaN(n)) return ''
+  if (n >= 80) return 'A'
+  if (n >= 70) return 'B'
+  if (n >= 60) return 'C'
+  if (n >= 50) return 'D'
+  return 'E'
+}
+
+function remarkPreview(g) {
+  return { A: 'EXCELLENT', B: 'VERY GOOD', C: 'GOOD', D: 'FAIR', E: 'POOR' }[g] || ''
+}
+
 export function SingleReportCard({ student, school }) {
   const report = student.report || {}
   const subjects = report.subjects || []
@@ -231,6 +246,12 @@ export function SingleReportCard({ student, school }) {
                 if (subIdInfo.num != null) identList.push(subIdInfo.num)
 
                 const initials = sub.teacher_initials || sub.initials || 'KM'
+                const finalGrade = (sub.grade && sub.grade !== '-' && sub.grade !== '—')
+                  ? sub.grade
+                  : (final100 != null ? gradePreview(final100) : '')
+                const finalRemark = (sub.remark && sub.remark !== '-' && sub.remark !== '—')
+                  ? sub.remark
+                  : (finalGrade ? remarkPreview(finalGrade) : '')
 
                 return (
                   <tr key={i}>
@@ -243,8 +264,8 @@ export function SingleReportCard({ student, school }) {
                     <td>{c2 != null ? c2 : ''}</td>
                     <td>{eotVal != null ? eotVal : ''}</td>
                     <td><b>{final100 != null ? `${final100}` : ''}</b></td>
-                    <td><b>{sub.grade || ''}</b></td>
-                    <td>{sub.remark || ''}</td>
+                    <td><b>{finalGrade}</b></td>
+                    <td>{finalRemark}</td>
                     <td>{initials}</td>
                   </tr>
                 )
@@ -343,6 +364,12 @@ export function SingleReportCard({ student, school }) {
           if (subIdInfo.num != null) identList.push(subIdInfo.num)
         })
         const overallIdentSum = identList.length ? identList.reduce((acc, v) => acc + v, 0) : ''
+        const overallAvgNum = report.average != null
+          ? Number(report.average)
+          : (avgList.length ? (avgList.reduce((a, b) => a + b, 0) / avgList.length) : null)
+        const overallGrade = (report.grade && report.grade !== '-' && report.grade !== '—')
+          ? report.grade
+          : (overallAvgNum != null ? gradePreview(overallAvgNum) : (student.grade || ''))
 
         return (
           <table className="rc-summary-strip">
@@ -353,7 +380,7 @@ export function SingleReportCard({ student, school }) {
                 <td className="strip-lbl">OVERALL ACHIEVEMENT</td>
                 <td className="strip-val">{report.achievement || ''}</td>
                 <td className="strip-lbl">GRADE</td>
-                <td className="strip-val">{report.grade || student.grade || ''}</td>
+                <td className="strip-val">{overallGrade}</td>
               </tr>
             </tbody>
           </table>

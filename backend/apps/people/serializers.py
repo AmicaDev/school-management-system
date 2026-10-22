@@ -148,7 +148,7 @@ class TeacherSerializer(_UserWriteMixin, serializers.ModelSerializer):
     phone = serializers.CharField(source="user.phone", required=False, allow_blank=True)
     is_active = serializers.BooleanField(source="user.is_active", required=False)
     password = serializers.CharField(write_only=True, required=False)
-    signin_code = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    signin_code = serializers.CharField(required=False, allow_blank=True)
     user_id = serializers.IntegerField(source="user.id", read_only=True)
     full_name = serializers.CharField(source="user.full_name", read_only=True)
     assignments = serializers.SerializerMethodField()
@@ -215,7 +215,7 @@ class TeacherSerializer(_UserWriteMixin, serializers.ModelSerializer):
         user = self._make_user(udata, "TEACHER")
         profile = TeacherProfile.objects.create(user=user, **validated)
         profile.set_signin_code(raw_code)
-        profile.save(update_fields=["signin_code_hash", "signin_code_issued_at"])
+        profile.save(update_fields=["signin_code", "signin_code_hash", "signin_code_issued_at"])
         profile._raw_signin_code = raw_code
         if class_streams is not None:
             user.class_streams.set(class_streams)
@@ -237,7 +237,7 @@ class TeacherSerializer(_UserWriteMixin, serializers.ModelSerializer):
         if raw_code:
             self._validate_custom_code(raw_code, instance=instance)
             instance.set_signin_code(raw_code)
-            instance.save(update_fields=["signin_code_hash", "signin_code_issued_at"])
+            instance.save(update_fields=["signin_code", "signin_code_hash", "signin_code_issued_at"])
             instance._raw_signin_code = raw_code
 
         profile = super().update(instance, validated)
@@ -249,11 +249,15 @@ class TeacherSerializer(_UserWriteMixin, serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        raw_code = getattr(instance, "_raw_signin_code", None)
-        if raw_code:
-            data["signin_code"] = raw_code
-        else:
-            data.pop("signin_code", None)
+        code = getattr(instance, "_raw_signin_code", None) or instance.signin_code
+        if not code and not instance.is_archived:
+            try:
+                code = generate_unique_teacher_code()
+                instance.set_signin_code(code)
+                instance.save(update_fields=["signin_code", "signin_code_hash", "signin_code_issued_at"])
+            except Exception:
+                pass
+        data["signin_code"] = code or ""
         return data
 
 

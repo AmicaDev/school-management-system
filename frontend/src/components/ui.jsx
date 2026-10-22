@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 export const Spinner = () => <span className="spinner" role="status" aria-label="Loading" />
 
@@ -14,6 +14,59 @@ export function ErrorState({ message, onRetry }) {
 
 export const Alert = ({ kind = 'error', children }) => (children ? <div className={`alert ${kind}`} role={kind === 'error' ? 'alert' : 'status'}>{children}</div> : null)
 export const Badge = ({ value, children }) => <span className={`badge ${value || ''}`}>{children ?? value}</span>
+
+export function TeacherCodeCell({ code }) {
+  const [show, setShow] = useState(false)
+  if (!code) return <span style={{ color: 'var(--muted, #888)' }}>—</span>
+
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+      <code
+        style={{
+          fontFamily: 'monospace',
+          fontSize: '0.85rem',
+          letterSpacing: show ? '0.05em' : '0.15em',
+          background: 'var(--bg-muted, #f1f3f5)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          userSelect: show ? 'all' : 'none',
+        }}
+      >
+        {show ? code : '••••••••'}
+      </code>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setShow((s) => !s)
+        }}
+        title={show ? 'Hide sign-in code' : 'Show sign-in code'}
+        aria-label={show ? 'Hide sign-in code' : 'Show sign-in code'}
+        style={{
+          border: 'none',
+          background: 'transparent',
+          cursor: 'pointer',
+          padding: '2px 4px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          color: 'var(--muted, #666)',
+        }}
+      >
+        {show ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+            <line x1="1" y1="1" x2="23" y2="23" />
+          </svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        )}
+      </button>
+    </div>
+  )
+}
 
 export function Modal({ title, onClose, children, wide }) {
   useEffect(() => {

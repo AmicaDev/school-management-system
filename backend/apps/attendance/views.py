@@ -16,11 +16,11 @@ from .models import AttendanceRecord, SyncTransaction
 class AttendanceSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source="student.full_name", read_only=True)
     gender = serializers.CharField(source="student.gender", read_only=True, default="")
-    class_name = serializers.CharField(source="stream.school_class.name", read_only=True, default="")
-    stream_name = serializers.CharField(source="stream.name", read_only=True, default="")
-    subject_name = serializers.CharField(source="subject.name", read_only=True, default="")
-    term_name = serializers.CharField(source="term.name", read_only=True, default="")
-    academic_year = serializers.CharField(source="term.year.name", read_only=True, default="")
+    class_name = serializers.SerializerMethodField()
+    stream_name = serializers.SerializerMethodField()
+    subject_name = serializers.SerializerMethodField()
+    term_name = serializers.SerializerMethodField()
+    academic_year = serializers.SerializerMethodField()
 
     class Meta:
         model = AttendanceRecord
@@ -28,6 +28,21 @@ class AttendanceSerializer(serializers.ModelSerializer):
             "id", "student", "student_name", "gender", "class_name", "stream_name", "stream",
             "subject", "subject_name", "date", "status", "term", "term_name", "academic_year"
         ]
+
+    def get_class_name(self, obj):
+        return obj.stream.school_class.name if obj.stream and getattr(obj.stream, "school_class", None) else ""
+
+    def get_stream_name(self, obj):
+        return obj.stream.name if obj.stream else ""
+
+    def get_subject_name(self, obj):
+        return obj.subject.name if obj.subject else ""
+
+    def get_term_name(self, obj):
+        return obj.term.name if obj.term else ""
+
+    def get_academic_year(self, obj):
+        return obj.term.year.name if obj.term and getattr(obj.term, "year", None) else ""
 
 
 class BulkRecord(serializers.Serializer):

@@ -102,7 +102,7 @@ class Command(BaseCommand):
 
             code = generate_unique_teacher_code()
             profile.set_signin_code(code)
-            profile.save(update_fields=["signin_code_hash", "signin_code_issued_at"])
+            profile.save(update_fields=["signin_code", "signin_code_hash", "signin_code_issued_at"])
             issued.append({
                 "username": profile.user.username,
                 "name": profile.user.full_name or profile.user.username,

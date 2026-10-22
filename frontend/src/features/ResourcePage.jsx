@@ -33,6 +33,26 @@ function useOptions(field) {
   return result
 }
 
+function FilterSelect({ filter, value, onChange }) {
+  const { opts } = useOptions(filter)
+  return (
+    <select
+      className="input"
+      style={{ width: 'auto' }}
+      value={value ?? ''}
+      aria-label={filter.label}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">{filter.label}</option>
+      {(opts || []).map(([v, l]) => (
+        <option key={v} value={v}>
+          {l}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 function Field({ f, value, error, onChange }) {
   const { opts, error: optionsError } = useOptions(f)
   const id = `f-${f.name}`
@@ -217,9 +237,15 @@ export default function ResourcePage({ cfg, embedded }) {
         <div className="row">
           {cfg.search !== false && <input className="input" style={{ width: 220 }} placeholder="Search…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); if (!embedded) setSp(e.target.value ? { q: e.target.value } : {}) }} aria-label={`Search ${cfg.title}`} />}
           {(cfg.filters || []).map((f) => (
-            <select key={f.name} className="input" style={{ width: 'auto' }} value={filters[f.name] ?? ''} aria-label={f.label} onChange={(e) => { setFilters((s) => ({ ...s, [f.name]: e.target.value })); setPage(1) }}>
-              <option value="">{f.label}</option>{f.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            <FilterSelect
+              key={f.name}
+              filter={f}
+              value={filters[f.name]}
+              onChange={(val) => {
+                setFilters((s) => ({ ...s, [f.name]: val }))
+                setPage(1)
+              }}
+            />
           ))}
           {!cfg.readOnly && <button className="btn primary" onClick={() => setForm({})}>+ New</button>}
         </div>

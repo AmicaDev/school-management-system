@@ -307,7 +307,7 @@ def _create(kind, valid):
             user.save()
             profile = TeacherProfile.objects.create(user=user, gender=v["gender"])
             profile.set_signin_code(v["signin_code"])
-            profile.save(update_fields=["signin_code_hash", "signin_code_issued_at"])
+            profile.save(update_fields=["signin_code", "signin_code_hash", "signin_code_issued_at"])
 
             if v.get("subject") and v.get("stream"):
                 from apps.academics.models import TeachingAssignment

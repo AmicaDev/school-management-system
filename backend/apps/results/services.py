@@ -21,15 +21,30 @@ PCT = Cast(F("score") * 100 / F("max_score"), FloatField())  # percentage of max
 
 def grade_for(mark, bands=None):
     bands = bands if bands is not None else list(GradeBand.objects.all())
-    m = Decimal(mark).quantize(Q2, ROUND_HALF_UP)
-    for b in bands:
-        if b.minimum <= m <= b.maximum:
-            return b.grade, b.remark
-    # marks between bands (e.g. 89.5 with integer bands): fall back to the highest band whose minimum is reached
-    for b in sorted(bands, key=lambda x: -x.minimum):
-        if m >= b.minimum:
-            return b.grade, b.remark
-    return "-", ""
+    try:
+        m = Decimal(str(mark)).quantize(Q2, ROUND_HALF_UP)
+    except Exception:
+        return "-", ""
+    if bands:
+        for b in bands:
+            if b.minimum <= m <= b.maximum:
+                return b.grade, b.remark
+        # marks between bands (e.g. 89.5 with integer bands): fall back to highest band whose minimum is reached
+        for b in sorted(bands, key=lambda x: -x.minimum):
+            if m >= b.minimum:
+                return b.grade, b.remark
+    # Fallback to standard official grading scale:
+    # 80-100: A (EXCELLENT), 70-79: B (VERY GOOD), 60-69: C (GOOD), 50-59: D (FAIR), 0-49: E (POOR)
+    val = float(m)
+    if val >= 80:
+        return "A", "EXCELLENT"
+    if val >= 70:
+        return "B", "VERY GOOD"
+    if val >= 60:
+        return "C", "GOOD"
+    if val >= 50:
+        return "D", "FAIR"
+    return "E", "POOR"
 
 
 def _subject_rows(assessments, bands, exam_types, teacher_initials=None):
@@ -49,15 +64,21 @@ def _subject_rows(assessments, bands, exam_types, teacher_initials=None):
             if ass_list:
                 pct = sum(a.percent for a in ass_list) / len(ass_list)
                 raw_sc = sum(a.score for a in ass_list) / len(ass_list)
-                parts[et.code] = pct.quantize(Q2, ROUND_HALF_UP)
-                raw_parts[et.code] = raw_sc.quantize(Q2, ROUND_HALF_UP)
                 code_upper = et.code.upper()
-                if code_upper in ("BOT", "BEGINNING_OF_TERM", "B_O_T"):
-                    bot_score = raw_sc
-                elif code_upper in ("FINAL", "EOT", "END", "END_OF_TERM", "E_O_T"):
+                if code_upper in ("FINAL", "EOT", "END", "END_OF_TERM", "E_O_T"):
+                    # Final Term Exams (80) should not be converted to percentage;
+                    # marks obtained at final is taken as obtained (e.g. 20 is 20, not 25%).
                     eot_score = raw_sc
+                    parts[et.code] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+                elif code_upper in ("BOT", "BEGINNING_OF_TERM", "B_O_T"):
+                    bot_score = raw_sc
+                    parts[et.code] = raw_sc.quantize(Q2, ROUND_HALF_UP)
                 elif code_upper in ("MID", "MIDTERM", "MID_TERM", "M_T"):
                     mid_score = raw_sc
+                    parts[et.code] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+                else:
+                    parts[et.code] = pct.quantize(Q2, ROUND_HALF_UP)
+                raw_parts[et.code] = raw_sc.quantize(Q2, ROUND_HALF_UP)
                 wsum += pct * et.weight
                 wtot += et.weight
 
