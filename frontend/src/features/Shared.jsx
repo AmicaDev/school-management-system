@@ -193,11 +193,11 @@ export function ClassResults({ downloads = true }) {
         const midVal = rawComps['MID'] != null ? Number(rawComps['MID']) : (rawComps['MIDTERM'] != null ? Number(rawComps['MIDTERM']) : (comps['MID'] != null ? Number(comps['MID']) : null))
         const eotVal = rawComps['FINAL'] != null ? Number(rawComps['FINAL']) : (rawComps['EOT'] != null ? Number(rawComps['EOT']) : (comps['FINAL'] != null ? Number(comps['FINAL']) : (comps['EOT'] != null ? Number(comps['EOT']) : null)))
 
-        const col20 = botVal != null ? botVal : null
+        const col20 = midVal != null ? midVal : null
         const c1Raw = sub.c1 != null ? Number(sub.c1) : (col20 != null ? (col20 / 20.0) * 3.0 : (comps['C1'] != null ? Number(comps['C1']) : null))
         const c1 = c1Raw != null ? Number(c1Raw.toFixed(1)) : null
 
-        const c2Raw = sub.c2 != null ? Number(sub.c2) : (midVal != null ? (midVal / 20.0) * 3.0 : c1)
+        const c2Raw = sub.c2 != null ? Number(sub.c2) : (botVal != null ? (botVal / 20.0) * 3.0 : c1)
         const c2 = c2Raw != null ? Number(c2Raw.toFixed(1)) : c1
 
         const avgRaw = (c1 != null && c2 != null) ? (c1 + c2) / 2.0 : (c1 != null ? c1 : c2)
@@ -214,12 +214,12 @@ export function ClassResults({ downloads = true }) {
           name: student.name,
           index_no: student.index_no,
           subject: sub.subject,
-          bot: col20 != null ? col20 : '—',
+          mid: col20 != null ? col20 : '—',
           c1: c1 != null ? c1 : '—',
           avg: avg != null ? avg : '—',
           ident: idInfo.ident,
           descr: idInfo.desc,
-          mid: midVal != null ? midVal : '—',
+          bot: botVal != null ? botVal : '—',
           eot: eotVal != null ? eotVal : '—',
           final_mark: final100 != null ? `${final100}%` : '—',
           grade: sub.grade || '—',
@@ -234,12 +234,12 @@ export function ClassResults({ downloads = true }) {
   const detailedCols = [
     { key: 'name', label: 'Name of student' },
     { key: 'subject', label: 'Subject' },
-    { key: 'bot', label: 'BOT (out of 20)' },
+    { key: 'mid', label: 'Mid-Term' },
     { key: 'c1', label: 'C1' },
     { key: 'avg', label: 'AVG' },
     { key: 'ident', label: 'IDENT' },
-    { key: 'descr', label: 'DESCR' },
-    { key: 'mid', label: 'Mid-Term' },
+    { key: 'descr', label: 'DESCRIPTOR' },
+    { key: 'bot', label: 'BOT (out of 20)' },
     { key: 'eot', label: 'End Of Term (Out of 80)' },
     { key: 'final_mark', label: 'Final Mark (100)' },
     { key: 'grade', label: 'GRADE' },
