@@ -182,25 +182,120 @@ export default function ResourcePage({ cfg, embedded }) {
   const [state, setState] = useState({ loading: true, error: '' })
   const [form, setForm] = useState(null)
   const [notice, setNotice] = useState('')
+  const [noticeKind, setNoticeKind] = useState('info')
   const pageSize = 25
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [selectAllMatching, setSelectAllMatching] = useState(false)
+  const [bulkModal, setBulkModal] = useState(null) // 'archive' | 'restore' | 'delete' | null
+  const [bulkReason, setBulkReason] = useState('')
+  const [bulkConfirmPhrase, setBulkConfirmPhrase] = useState('')
+  const [bulkProcessing, setBulkProcessing] = useState(false)
+  const [bulkError, setBulkError] = useState('')
+
+  const isArchivedView = filters.is_archived === 'true' || cfg.recycleBin
 
   const load = useCallback(() => {
     setState({ loading: true, error: '' })
-    const params = { page, page_size: pageSize, ...(search ? { search } : {}), ...(cfg.ordering ? { ordering: cfg.ordering } : {}), ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')), ...(cfg.params || {}) }
+    const params = {
+      page,
+      page_size: pageSize,
+      ...(search ? { search } : {}),
+      ...(cfg.ordering ? { ordering: cfg.ordering } : {}),
+      ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')),
+      ...(cfg.params || {})
+    }
     return api.get(cfg.endpoint, { params })
-      .then((r) => { setRows(items(r.data)); setCount(Array.isArray(r.data) ? r.data.length : r.data.count); setState({ loading: false, error: '' }) })
+      .then((r) => {
+        setRows(items(r.data))
+        setCount(Array.isArray(r.data) ? r.data.length : r.data.count)
+        setState({ loading: false, error: '' })
+      })
       .catch((e) => setState({ loading: false, error: errorMessage(e) }))
   }, [cfg, page, search, filters])
 
-  useEffect(() => { const t = setTimeout(load, search ? 250 : 0); return () => clearTimeout(t) }, [load, search])
+  useEffect(() => {
+    const t = setTimeout(load, search ? 250 : 0)
+    return () => clearTimeout(t)
+  }, [load, search])
 
+  // Clear selection whenever search, filter, or page changes to prevent accidental operations
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set())
+    setSelectAllMatching(false)
+  }, [])
+
+  const handleFilterChange = (name, val) => {
+    setFilters((s) => ({ ...s, [name]: val }))
+    setPage(1)
+    clearSelection()
+  }
+
+  const handleSearchChange = (val) => {
+    setSearch(val)
+    setPage(1)
+    clearSelection()
+    if (!embedded) setSp(val ? { q: val } : {})
+  }
+
+  const selectedCount = selectAllMatching ? count : selectedIds.size
+
+  const allPageSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
+
+  const toggleAllPage = () => {
+    if (allPageSelected) {
+      setSelectedIds((s) => {
+        const next = new Set(s)
+        rows.forEach((r) => next.delete(r.id))
+        return next
+      })
+      setSelectAllMatching(false)
+    } else {
+      setSelectedIds((s) => {
+        const next = new Set(s)
+        rows.forEach((r) => next.add(r.id))
+        return next
+      })
+    }
+  }
+
+  const toggleOne = (id) => {
+    setSelectedIds((s) => {
+      const next = new Set(s)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    setSelectAllMatching(false)
+  }
+
+  // Single row actions
   const remove = async (row) => {
     if (!window.confirm(`${cfg.removeLabel || 'Archive'} this record?`)) return
-    try { await api.delete(`${cfg.endpoint}${row.id}/`); setNotice(`${cfg.removeLabel || 'Archived'} successfully.`); load() } catch (e) { setNotice(errorMessage(e)) }
+    try {
+      await api.delete(`${cfg.endpoint}${row.id}/`)
+      setNoticeKind('success')
+      setNotice(`${cfg.removeLabel || 'Archived'} successfully.`)
+      clearSelection()
+      load()
+    } catch (e) {
+      setNoticeKind('error')
+      setNotice(errorMessage(e))
+    }
   }
 
   const restore = async (row) => {
-    try { await api.post(`${cfg.endpoint}${row.id}/restore/`); setNotice('Record restored.'); load() } catch (e) { setNotice(errorMessage(e)) }
+    try {
+      await api.post(`${cfg.endpoint}${row.id}/restore/`)
+      setNoticeKind('success')
+      setNotice('Record restored successfully.')
+      clearSelection()
+      load()
+    } catch (e) {
+      setNoticeKind('error')
+      setNotice(errorMessage(e))
+    }
   }
 
   const permanentlyDelete = async (row) => {
@@ -208,68 +303,429 @@ export default function ResourcePage({ cfg, embedded }) {
       alert('Administrator accounts cannot be permanently deleted.')
       return
     }
-    if (!window.confirm(`Permanently delete this ${cfg.singular || cfg.title.toLowerCase().replace(/s$/, '')}? This cannot be undone.`)) return
+    const phrase = window.prompt(
+      `Permanent deletion cannot be undone. To permanently delete this record, type DELETE PERMANENTLY below:`
+    )
+    if (phrase !== 'DELETE PERMANENTLY') {
+      if (phrase !== null) alert('Deletion cancelled: confirmation phrase did not match.')
+      return
+    }
     try {
       await api.delete(`${cfg.endpoint}${row.id}/permanent-delete/`)
+      setNoticeKind('success')
       setNotice('Record permanently deleted.')
+      clearSelection()
       load()
-    } catch (e) { setNotice(errorMessage(e)) }
+    } catch (e) {
+      setNoticeKind('error')
+      setNotice(errorMessage(e))
+    }
   }
 
-  const columns = [...cfg.columns, ...(cfg.readOnly && !cfg.rowActions && !cfg.recycleBin ? [] : [{ key: '_a', label: '', render: (r) => (
-    <div className="row" style={{ flexWrap: 'nowrap' }}>
-      {cfg.rowActions?.(r, load)}
-      {cfg.recycleBin && <>
-        <button className="btn sm" onClick={() => restore(r)}>Restore</button>
-        {r.role !== 'ADMIN' && <button className="btn sm danger" onClick={() => permanentlyDelete(r)}>Delete permanently</button>}
-      </>}
-      {!cfg.readOnly && <button className="btn sm" onClick={() => setForm(r)}>Edit</button>}
-      {!cfg.readOnly && !cfg.noRemove && <button className="btn sm danger" onClick={() => remove(r)}>{cfg.removeLabel || 'Archive'}</button>}
-      {!cfg.readOnly && cfg.canPermanentDelete && r.role !== 'ADMIN' && (
-        <button className="btn sm danger" title="Delete permanently" onClick={() => permanentlyDelete(r)}>Delete</button>
-      )}
-    </div>) }])]
+  // Bulk actions executor
+  const executeBulkAction = async () => {
+    setBulkProcessing(true)
+    setBulkError('')
+    const ids = Array.from(selectedIds)
+
+    try {
+      if (bulkModal === 'archive') {
+        const res = await api.post(`${cfg.endpoint}bulk_archive/`, {
+          ids,
+          select_all_matching: selectAllMatching,
+          reason: bulkReason
+        })
+        setNoticeKind('success')
+        setNotice(res.data.message || `Archived ${res.data.archived_count || ids.length} record(s).`)
+      } else if (bulkModal === 'restore') {
+        const res = await api.post(`${cfg.endpoint}bulk_restore/`, {
+          ids,
+          select_all_matching: selectAllMatching
+        })
+        setNoticeKind('success')
+        setNotice(res.data.message || `Restored ${res.data.restored_count || ids.length} record(s).`)
+      } else if (bulkModal === 'delete') {
+        const res = await api.post(`${cfg.endpoint}bulk-permanent-delete/`, {
+          ids,
+          confirmation_phrase: bulkConfirmPhrase,
+          reason: bulkReason
+        })
+        if (res.data.blocked_count > 0) {
+          setNoticeKind('warning')
+          setNotice(
+            `Permanently deleted ${res.data.deleted_count} record(s). ${res.data.blocked_count} record(s) could not be deleted because linked academic/attendance records must be retained.`
+          )
+        } else {
+          setNoticeKind('success')
+          setNotice(res.data.message || `Permanently deleted ${res.data.deleted_count} record(s).`)
+        }
+      }
+      setBulkModal(null)
+      clearSelection()
+      load()
+    } catch (err) {
+      setBulkError(errorMessage(err))
+    } finally {
+      setBulkProcessing(false)
+    }
+  }
+
+  // Build columns with checkbox if enabled
+  const bulkCol = (cfg.enableBulkSelect && !cfg.readOnly) ? [{
+    key: '_sel',
+    label: (
+      <input
+        type="checkbox"
+        checked={allPageSelected}
+        onChange={toggleAllPage}
+        aria-label="Select all on this page"
+      />
+    ),
+    render: (r) => (
+      <input
+        type="checkbox"
+        checked={selectedIds.has(r.id)}
+        onChange={() => toggleOne(r.id)}
+        aria-label={`Select ${r.full_name || r.name || r.id}`}
+      />
+    )
+  }] : []
+
+  const actionCol = (cfg.readOnly && !cfg.rowActions && !cfg.recycleBin) ? [] : [{
+    key: '_a',
+    label: '',
+    render: (r) => (
+      <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
+        {cfg.rowActions?.(r, load)}
+        {cfg.recycleBin && (
+          <>
+            <button className="btn sm" onClick={() => restore(r)}>Restore</button>
+            {r.role !== 'ADMIN' && <button className="btn sm danger" onClick={() => permanentlyDelete(r)}>Delete permanently</button>}
+          </>
+        )}
+        {!cfg.readOnly && !cfg.recycleBin && isArchivedView && (
+          <>
+            <button className="btn sm success" onClick={() => restore(r)}>Restore</button>
+            {cfg.canPermanentDelete && r.role !== 'ADMIN' && (
+              <button className="btn sm danger" title="Delete permanently" onClick={() => permanentlyDelete(r)}>Delete</button>
+            )}
+          </>
+        )}
+        {!cfg.readOnly && !cfg.recycleBin && !isArchivedView && (
+          <>
+            <button className="btn sm" onClick={() => setForm(r)}>Edit</button>
+            {!cfg.noRemove && (
+              <button className="btn sm danger" onClick={() => remove(r)}>{cfg.removeLabel || 'Archive'}</button>
+            )}
+            {cfg.canPermanentDelete && r.role !== 'ADMIN' && (
+              <button className="btn sm danger" title="Delete permanently" onClick={() => permanentlyDelete(r)}>Delete</button>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }]
+
+  const columns = [...bulkCol, ...cfg.columns, ...actionCol]
 
   return (
     <section className="panel">
       <div className="panel-head">
         <h2>{cfg.title}</h2>
         <div className="row">
-          {cfg.search !== false && <input className="input" style={{ width: 220 }} placeholder="Search…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); if (!embedded) setSp(e.target.value ? { q: e.target.value } : {}) }} aria-label={`Search ${cfg.title}`} />}
+          {cfg.search !== false && (
+            <input
+              className="input"
+              style={{ width: 220 }}
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              aria-label={`Search ${cfg.title}`}
+            />
+          )}
           {(cfg.filters || []).map((f) => (
             <FilterSelect
               key={f.name}
               filter={f}
               value={filters[f.name]}
-              onChange={(val) => {
-                setFilters((s) => ({ ...s, [f.name]: val }))
-                setPage(1)
-              }}
+              onChange={(val) => handleFilterChange(f.name, val)}
             />
           ))}
           {!cfg.readOnly && <button className="btn primary" onClick={() => setForm({})}>+ New</button>}
         </div>
       </div>
-      <Alert kind="info">{notice}</Alert>
-      {state.loading && !rows.length ? <Skeleton rows={6} />
-        : state.error ? <ErrorState message={state.error} onRetry={load} />
-          : !rows.length ? <Empty title={`No ${cfg.title.toLowerCase()} found`}>{search ? 'Try a different search.' : cfg.readOnly ? 'Records will appear here once they exist.' : 'Use “New” to add the first one.'}</Empty>
-            : <Table columns={columns} rows={rows} />}
+
+      {notice && (
+        <div style={{ marginBottom: 12 }}>
+          <Alert kind={noticeKind}>{notice}</Alert>
+        </div>
+      )}
+
+      {/* Select all matching banner across pagination */}
+      {cfg.enableBulkSelect && allPageSelected && count > rows.length && (
+        <div
+          className="row spread"
+          style={{
+            background: 'var(--surface-raised, #f0f4f8)',
+            padding: '8px 16px',
+            borderRadius: 8,
+            marginBottom: 10,
+            fontSize: 13,
+            border: '1px solid var(--border)'
+          }}
+        >
+          {selectAllMatching ? (
+            <span>All <b>{count}</b> matching {cfg.title.toLowerCase()} across all pages are selected.</span>
+          ) : (
+            <span>All <b>{rows.length}</b> records on this page are selected.</span>
+          )}
+          <button
+            className="btn sm"
+            type="button"
+            onClick={() => setSelectAllMatching((s) => !s)}
+          >
+            {selectAllMatching ? 'Select current page only' : `Select all ${count} matching ${cfg.title.toLowerCase()}`}
+          </button>
+        </div>
+      )}
+
+      {/* Accessible Floating/Sticky Bulk Toolbar */}
+      {selectedCount > 0 && (
+        <div
+          className="row spread"
+          style={{
+            position: 'sticky',
+            top: 60,
+            zIndex: 10,
+            background: 'var(--surface)',
+            padding: '10px 16px',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            marginBottom: 12
+          }}
+          role="region"
+          aria-label="Bulk actions toolbar"
+        >
+          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+            <span className="badge primary" style={{ fontSize: 13, padding: '4px 10px' }}>
+              {selectedCount} selected
+            </span>
+            <button className="btn sm" type="button" onClick={clearSelection}>
+              Clear selection
+            </button>
+          </div>
+
+          <div className="row" style={{ gap: 8 }}>
+            {isArchivedView ? (
+              <button
+                className="btn sm success"
+                type="button"
+                onClick={() => {
+                  setBulkReason('')
+                  setBulkError('')
+                  setBulkModal('restore')
+                }}
+              >
+                Restore selected ({selectedCount})
+              </button>
+            ) : (
+              <button
+                className="btn sm warning"
+                type="button"
+                onClick={() => {
+                  setBulkReason('')
+                  setBulkError('')
+                  setBulkModal('archive')
+                }}
+              >
+                {cfg.removeLabel || 'Archive'} selected ({selectedCount})
+              </button>
+            )}
+
+            {cfg.canPermanentDelete && (
+              <button
+                className="btn sm danger"
+                type="button"
+                onClick={() => {
+                  setBulkConfirmPhrase('')
+                  setBulkReason('')
+                  setBulkError('')
+                  setBulkModal('delete')
+                }}
+              >
+                Delete permanently ({selectedCount})
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {state.loading && !rows.length ? (
+        <Skeleton rows={6} />
+      ) : state.error ? (
+        <ErrorState message={state.error} onRetry={load} />
+      ) : !rows.length ? (
+        <Empty title={`No ${cfg.title.toLowerCase()} found`}>
+          {search ? 'Try a different search.' : cfg.readOnly ? 'Records will appear here once they exist.' : 'Use “New” to add the first one.'}
+        </Empty>
+      ) : (
+        <Table columns={columns} rows={rows} />
+      )}
+
       {count > pageSize && (
         <div className="row spread" style={{ marginTop: 12 }}>
           <span className="muted">{count} records</span>
-          <div className="row"><button className="btn sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page} of {Math.ceil(count / pageSize)}</span><button className="btn sm" disabled={page * pageSize >= count} onClick={() => setPage(page + 1)}>Next</button></div>
+          <div className="row">
+            <button className="btn sm" disabled={page <= 1} onClick={() => { setPage(page - 1); clearSelection() }}>
+              Previous
+            </button>
+            <span>Page {page} of {Math.ceil(count / pageSize)}</span>
+            <button className="btn sm" disabled={page * pageSize >= count} onClick={() => { setPage(page + 1); clearSelection() }}>
+              Next
+            </button>
+          </div>
         </div>
       )}
-      {form && <FormModal cfg={cfg} record={form.id ? form : null} onClose={() => setForm(null)} onSaved={(savedData) => {
-        setForm(null)
-        if (savedData?.signin_code) {
-          setNotice(`Saved! Teacher sign-in code: ${savedData.signin_code} — please copy or share this with the teacher now (it will not be shown again).`)
-        } else {
-          setNotice('Saved.')
-        }
-        load()
-      }} />}
+
+      {/* Form Modal (Create / Edit) */}
+      {form && (
+        <FormModal
+          cfg={cfg}
+          record={form.id ? form : null}
+          onClose={() => setForm(null)}
+          onSaved={(savedData) => {
+            setForm(null)
+            if (savedData?.signin_code) {
+              setNoticeKind('info')
+              setNotice(`Saved! Teacher sign-in code: ${savedData.signin_code} — please copy or share this with the teacher now (it will not be shown again).`)
+            } else {
+              setNoticeKind('success')
+              setNotice('Saved.')
+            }
+            load()
+          }}
+        />
+      )}
+
+      {/* Bulk Action Confirmation Modals */}
+      {bulkModal === 'archive' && (
+        <Modal title={`Archive ${selectedCount} ${cfg.singular || 'record'}(s)`} onClose={() => setBulkModal(null)}>
+          <div className="stack" style={{ gap: 14 }}>
+            {bulkError && <Alert kind="error">{bulkError}</Alert>}
+            <p>
+              Are you sure you want to archive <b>{selectedCount}</b> {cfg.title.toLowerCase()}?
+              Archived records are hidden from active lists, but their full academic history, attendance, and audit records remain intact and can be restored at any time.
+            </p>
+            <div className="field">
+              <label htmlFor="bulk-archive-reason">Reason for archiving (optional)</label>
+              <input
+                id="bulk-archive-reason"
+                className="input"
+                placeholder="e.g. Graduated, Transferred, Completed term..."
+                value={bulkReason}
+                onChange={(e) => setBulkReason(e.target.value)}
+              />
+            </div>
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <button type="button" className="btn" onClick={() => setBulkModal(null)} disabled={bulkProcessing}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn warning"
+                onClick={executeBulkAction}
+                disabled={bulkProcessing}
+              >
+                {bulkProcessing ? 'Archiving…' : `Confirm Archive (${selectedCount})`}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {bulkModal === 'restore' && (
+        <Modal title={`Restore ${selectedCount} ${cfg.singular || 'record'}(s)`} onClose={() => setBulkModal(null)}>
+          <div className="stack" style={{ gap: 14 }}>
+            {bulkError && <Alert kind="error">{bulkError}</Alert>}
+            <p>
+              Are you sure you want to restore <b>{selectedCount}</b> {cfg.title.toLowerCase()} back to active status?
+            </p>
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <button type="button" className="btn" onClick={() => setBulkModal(null)} disabled={bulkProcessing}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn success"
+                onClick={executeBulkAction}
+                disabled={bulkProcessing}
+              >
+                {bulkProcessing ? 'Restoring…' : `Confirm Restore (${selectedCount})`}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {bulkModal === 'delete' && (
+        <Modal title="⚠️ Confirm Permanent Deletion" onClose={() => setBulkModal(null)}>
+          <div className="stack" style={{ gap: 14 }}>
+            <Alert kind="error">
+              <b>High-Risk Permanent Deletion</b>
+              <br />
+              This action will completely delete eligible records from the database. It cannot be undone.
+              <br /><br />
+              <b>Safety Safeguards:</b> Any records with linked academic marks, assessment results, or attendance sessions cannot be deleted and will be protected automatically.
+            </Alert>
+
+            {bulkError && <Alert kind="error">{bulkError}</Alert>}
+
+            <p>
+              You have selected <b>{selectedCount}</b> {cfg.title.toLowerCase()} for permanent deletion.
+            </p>
+
+            <div className="field">
+              <label htmlFor="bulk-delete-confirm">
+                To proceed, type <b>DELETE PERMANENTLY</b> below: *
+              </label>
+              <input
+                id="bulk-delete-confirm"
+                className="input"
+                placeholder="DELETE PERMANENTLY"
+                value={bulkConfirmPhrase}
+                onChange={(e) => setBulkConfirmPhrase(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="bulk-delete-reason">Reason for deletion (audited)</label>
+              <input
+                id="bulk-delete-reason"
+                className="input"
+                placeholder="e.g. Duplicate test record created in error..."
+                value={bulkReason}
+                onChange={(e) => setBulkReason(e.target.value)}
+              />
+            </div>
+
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <button type="button" className="btn" onClick={() => setBulkModal(null)} disabled={bulkProcessing}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                onClick={executeBulkAction}
+                disabled={bulkProcessing || bulkConfirmPhrase !== 'DELETE PERMANENTLY'}
+              >
+                {bulkProcessing ? 'Deleting…' : `Permanently Delete (${selectedCount})`}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </section>
   )
 }

@@ -984,3 +984,153 @@ class TeacherAssignmentTests(Base):
             TeachingAssignment.objects.filter(teacher=self.t1, subject=bio, is_active=True).count(),
             6,
         )
+
+
+class BulkArchivingAndPermanentDeletionTests(Base):
+    def test_admin_bulk_archive_and_restore_students(self):
+        self.client.force_authenticate(user=self.admin)
+        r_arch = self.client.post("/api/v1/students/bulk_archive/", {
+            "ids": [self.s1.id, self.s2.id],
+            "reason": "Graduated Form 4",
+        }, format="json")
+        self.assertEqual(r_arch.status_code, 200)
+        self.assertEqual(r_arch.data["archived_count"], 2)
+
+        self.s1.refresh_from_db()
+        self.s2.refresh_from_db()
+        self.assertTrue(self.s1.is_archived)
+        self.assertTrue(self.s2.is_archived)
+
+        # Active list excludes them by default
+        r_list_active = self.client.get("/api/v1/students/")
+        self.assertEqual(r_list_active.data["count"], 0)
+
+        # Archive filter includes them
+        r_list_arch = self.client.get("/api/v1/students/?is_archived=true")
+        self.assertEqual(r_list_arch.data["count"], 2)
+
+        # Restore in bulk
+        r_rest = self.client.post("/api/v1/students/bulk_restore/", {
+            "ids": [self.s1.id],
+        }, format="json")
+        self.assertEqual(r_rest.status_code, 200)
+        self.assertEqual(r_rest.data["restored_count"], 1)
+
+        self.s1.refresh_from_db()
+        self.assertFalse(self.s1.is_archived)
+
+    def test_admin_bulk_archive_and_restore_teachers(self):
+        self.client.force_authenticate(user=self.admin)
+        prof = TeacherProfile.objects.create(user=self.t2, gender="M")
+
+        r_arch = self.client.post("/api/v1/teachers/bulk_archive/", {
+            "ids": [prof.id],
+            "reason": "Contract ended",
+        }, format="json")
+        self.assertEqual(r_arch.status_code, 200)
+        self.assertEqual(r_arch.data["archived_count"], 1)
+
+        prof.refresh_from_db()
+        self.t2.refresh_from_db()
+        self.assertTrue(prof.is_archived)
+        self.assertFalse(self.t2.is_active)
+
+        # Restore
+        r_rest = self.client.post("/api/v1/teachers/bulk_restore/", {
+            "ids": [prof.id],
+        }, format="json")
+        self.assertEqual(r_rest.status_code, 200)
+        self.assertEqual(r_rest.data["restored_count"], 1)
+
+        prof.refresh_from_db()
+        self.t2.refresh_from_db()
+        self.assertFalse(prof.is_archived)
+        self.assertTrue(self.t2.is_active)
+
+    def test_permanent_deletion_requires_exact_confirmation_phrase(self):
+        self.client.force_authenticate(user=self.admin)
+        r_fail = self.client.post("/api/v1/students/bulk-permanent-delete/", {
+            "ids": [self.s1.id],
+            "confirmation_phrase": "WRONG_PHRASE",
+        }, format="json")
+        self.assertEqual(r_fail.status_code, 400)
+        self.assertIn("DELETE PERMANENTLY", str(r_fail.data))
+
+    def test_permanent_deletion_blocked_if_historical_academic_results_exist(self):
+        self.client.force_authenticate(user=self.admin)
+        # Create an assessment mark linked to s1
+        Assessment.objects.create(
+            student=self.s1, subject=self.maths, paper_number=1,
+            term=self.term, exam_type=self.et, score=75, max_score=100
+        )
+        self.s1.is_archived = True
+        self.s1.save()
+
+        # Single permanent delete attempt
+        r_single = self.client.delete(f"/api/v1/students/{self.s1.id}/permanent-delete/")
+        self.assertEqual(r_single.status_code, 400)
+        self.assertIn("Cannot permanently delete", str(r_single.data))
+        self.assertTrue(Student.objects.filter(id=self.s1.id).exists())
+
+        # Bulk permanent delete attempt
+        r_bulk = self.client.post("/api/v1/students/bulk-permanent-delete/", {
+            "ids": [self.s1.id],
+            "confirmation_phrase": "DELETE PERMANENTLY",
+        }, format="json")
+        self.assertEqual(r_bulk.status_code, 200)
+        self.assertEqual(r_bulk.data["deleted_count"], 0)
+        self.assertEqual(r_bulk.data["blocked_count"], 1)
+        self.assertTrue(Student.objects.filter(id=self.s1.id).exists())
+
+    def test_permanent_deletion_blocked_if_attendance_records_exist(self):
+        self.client.force_authenticate(user=self.admin)
+        AttendanceRecord.objects.create(
+            student=self.s2, stream=self.stream, date=date(2026, 2, 1), status="PRESENT"
+        )
+        self.s2.is_archived = True
+        self.s2.save()
+
+        r_bulk = self.client.post("/api/v1/students/bulk-permanent-delete/", {
+            "ids": [self.s2.id],
+            "confirmation_phrase": "DELETE PERMANENTLY",
+        }, format="json")
+        self.assertEqual(r_bulk.status_code, 200)
+        self.assertEqual(r_bulk.data["deleted_count"], 0)
+        self.assertEqual(r_bulk.data["blocked_count"], 1)
+        self.assertTrue(Student.objects.filter(id=self.s2.id).exists())
+
+    def test_permanent_deletion_succeeds_for_eligible_archived_records_without_history(self):
+        self.client.force_authenticate(user=self.admin)
+        clean_student = Student.objects.create(
+            index_no="CLEAN_TEST", first_name="Clean", last_name="Student", gender="M", stream=self.stream
+        )
+        # Attempt to delete while not yet archived should be blocked
+        r_not_arch = self.client.delete(f"/api/v1/students/{clean_student.id}/permanent-delete/")
+        self.assertEqual(r_not_arch.status_code, 400)
+        self.assertIn("must be archived", str(r_not_arch.data))
+
+        # Archive first
+        clean_student.is_archived = True
+        clean_student.save()
+
+        # Now delete permanently
+        r_ok = self.client.post("/api/v1/students/bulk-permanent-delete/", {
+            "ids": [clean_student.id],
+            "confirmation_phrase": "DELETE PERMANENTLY",
+            "reason": "Test duplicate record",
+        }, format="json")
+        self.assertEqual(r_ok.status_code, 200)
+        self.assertEqual(r_ok.data["deleted_count"], 1)
+        self.assertFalse(Student.objects.filter(id=clean_student.id).exists())
+
+    def test_non_admin_cannot_bulk_archive_restore_or_delete(self):
+        self.client.force_authenticate(user=self.t1)
+        r1 = self.client.post("/api/v1/students/bulk_archive/", {"ids": [self.s1.id]}, format="json")
+        self.assertEqual(r1.status_code, 403)
+        r2 = self.client.post("/api/v1/students/bulk_restore/", {"ids": [self.s1.id]}, format="json")
+        self.assertEqual(r2.status_code, 403)
+        r3 = self.client.post("/api/v1/students/bulk-permanent-delete/", {
+            "ids": [self.s1.id],
+            "confirmation_phrase": "DELETE PERMANENTLY",
+        }, format="json")
+        self.assertEqual(r3.status_code, 403)

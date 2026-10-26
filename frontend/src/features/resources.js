@@ -15,9 +15,21 @@ const teachersByUser = { endpoint: '/teachers/', value: 'user_id', label: 'full_
 export const R = {
   students: {
     title: 'Students', singular: 'student', endpoint: '/students/', ordering: 'last_name',
-    columns: [{ key: 'index_no', label: 'Index no.' }, { key: 'candidate_no', label: 'Senior candidate no.' }, { key: 'full_name', label: 'Name' }, { key: 'gender', label: 'Gender', render: gender },
-      { key: 'stream_label', label: 'Class / stream' }, { key: 'created_at', label: 'Added', render: (r) => fmtDate(r.created_at) }],
-    filters: [{ name: 'gender', label: 'All genders', options: GENDER }, { name: 'ordering', label: 'Sort: name', options: [['-created_at', 'Newest added'], ['-updated_at', 'Recently modified']] }],
+    removeLabel: 'Archive', canPermanentDelete: true, enableBulkSelect: true,
+    columns: [
+      { key: 'index_no', label: 'Index no.' },
+      { key: 'candidate_no', label: 'Senior candidate no.' },
+      { key: 'full_name', label: 'Name' },
+      { key: 'gender', label: 'Gender', render: gender },
+      { key: 'stream_label', label: 'Class / stream' },
+      { key: 'is_archived', label: 'Status', render: (r) => (r.is_archived ? h('span', { className: 'badge danger' }, 'Archived') : h('span', { className: 'badge success' }, 'Active')) },
+      { key: 'created_at', label: 'Added', render: (r) => fmtDate(r.created_at) },
+    ],
+    filters: [
+      { name: 'is_archived', label: 'All records', options: [['false', 'Active only'], ['true', 'Archived only']] },
+      { name: 'gender', label: 'All genders', options: GENDER },
+      { name: 'ordering', label: 'Sort: name', options: [['-created_at', 'Newest added'], ['-updated_at', 'Recently modified']] },
+    ],
     fields: [
       { name: 'index_no', label: 'Index number', help: 'Leave blank to generate automatically during admission. Parents can use this number to sign in.' },
       { name: 'candidate_no', label: 'Senior exam candidate number', help: 'Optional; use for senior/Form 4 and Form 6 candidates.' },
@@ -28,7 +40,7 @@ export const R = {
       { name: 'photo', label: 'Photo', type: 'file' }],
   },
   parents: {
-    title: 'Parents', singular: 'parent', endpoint: '/parents/', removeLabel: 'Deactivate',
+    title: 'Parents', singular: 'parent', endpoint: '/parents/', removeLabel: 'Deactivate', canPermanentDelete: true, enableBulkSelect: true,
     columns: [{ key: 'full_name', label: 'Name' }, { key: 'username', label: 'Username' }, { key: 'phone', label: 'Phone' }, { key: 'address', label: 'Address' },
       { key: 'children', label: 'Children', render: (r) => r.children.map((c) => c.name).join(', ') || '—' }, { key: 'is_active', label: 'Active', render: yes('is_active') }],
     filters: [{ name: 'is_active', label: 'All accounts', options: [['true', 'Active'], ['false', 'Inactive']] }],
@@ -40,13 +52,16 @@ export const R = {
       { name: 'is_active', label: 'Account active', type: 'checkbox', default: true }],
   },
   teachers: {
-    title: 'Teachers', singular: 'teacher', endpoint: '/teachers/', removeLabel: 'Archive', canPermanentDelete: true, params: {},
+    title: 'Teachers', singular: 'teacher', endpoint: '/teachers/', removeLabel: 'Archive', canPermanentDelete: true, enableBulkSelect: true, params: {},
     columns: [{ key: 'full_name', label: 'Name' }, { key: 'username', label: 'Username' },
       { key: 'signin_code', label: 'Sign-in code', render: (r) => h(TeacherCodeCell, { code: r.signin_code }) },
       { key: 'phone', label: 'Phone' },
       { key: 'assignments', label: 'Subjects', render: (r) => [...new Set((r.assignments || []).map((a) => a.code))].join(', ') || '—' },
-      { key: 'is_archived', label: 'Status', render: (r) => (r.is_archived ? 'Archived' : 'Active') }],
-    filters: [{ name: 'gender', label: 'All genders', options: GENDER }],
+      { key: 'is_archived', label: 'Status', render: (r) => (r.is_archived ? h('span', { className: 'badge danger' }, 'Archived') : h('span', { className: 'badge success' }, 'Active')) }],
+    filters: [
+      { name: 'is_archived', label: 'All records', options: [['false', 'Active only'], ['true', 'Archived only']] },
+      { name: 'gender', label: 'All genders', options: GENDER },
+    ],
     fields: [{ name: 'username', label: 'Username', required: true }, { name: 'first_name', label: 'First name', required: true }, { name: 'last_name', label: 'Last name', required: true },
       { name: 'gender', label: 'Gender', type: 'select', options: GENDER, required: true }, { name: 'email', label: 'Email', type: 'email' }, { name: 'phone', label: 'Phone' },
       { name: 'password', label: 'Password', type: 'password', required: true, help: 'Set by the administrator. Never use the teacher\'s name.' },
@@ -60,7 +75,7 @@ export const R = {
       { name: 'class_stream_ids', label: 'Class teacher for', type: 'multiselect', options: streams }],
   },
   staff: {
-    title: 'Staff', singular: 'staff member', endpoint: '/staff/', removeLabel: 'Deactivate', canPermanentDelete: true,
+    title: 'Staff', singular: 'staff member', endpoint: '/staff/', removeLabel: 'Deactivate', canPermanentDelete: true, enableBulkSelect: true,
     columns: [{ key: 'name', label: 'Name' }, { key: 'gender', label: 'Gender', render: gender }, { key: 'category', label: 'Category' }, { key: 'position', label: 'Position' },
       { key: 'department', label: 'Department' }, { key: 'contact', label: 'Contact' }, { key: 'status', label: 'Status', render: badge('status') }],
     filters: [{ name: 'category', label: 'All categories', options: [['TEACHING', 'Teaching'], ['NON_TEACHING', 'Non-teaching']] }, { name: 'status', label: 'Any status', options: [['ACTIVE', 'Active'], ['INACTIVE', 'Inactive']] }],
