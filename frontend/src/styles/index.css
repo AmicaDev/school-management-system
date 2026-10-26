@@ -494,6 +494,85 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
   margin-left: 4px;
 }
 
+/* =====================================================================
+   Mid-Term Report Card (A4) styles
+   ===================================================================== */
+.mt-report-page {
+  position: relative;
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 3.5px solid #104a8e;
+  border-radius: 0;
+  padding: 14px 18px;
+  box-shadow: var(--shadow-2);
+  font-family: Arial, 'Segoe UI', Helvetica, sans-serif;
+  font-size: 10.5px;
+  line-height: 1.25;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.mt-report-page::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px; right: 3px; bottom: 3px;
+  border: 1px solid #104a8e;
+  pointer-events: none; z-index: 10;
+}
+.mt-report-page::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 380px; height: 380px;
+  background-image: url('/kiyingi_logo.png');
+  background-repeat: no-repeat; background-position: center; background-size: contain;
+  opacity: 0.08; pointer-events: none; z-index: 0;
+}
+.mt-report-page > * { position: relative; z-index: 1; }
+
+.mt-header {
+  display: grid;
+  grid-template-columns: 85px 1fr 105px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.mt-logo-col { text-align: center; }
+.mt-logo { width: 82px; height: 82px; object-fit: contain; display: block; margin: 0 auto; }
+.mt-title-area { text-align: center; }
+.mt-school-name { font-size: 15px; font-weight: 800; color: #000000; margin: 0 0 2px; letter-spacing: 0.3px; font-family: Arial, Helvetica, sans-serif; }
+.mt-school-location { font-size: 9px; font-weight: 700; color: #000000; margin: 0 0 2px; letter-spacing: 0.2px; }
+.mt-school-meta { font-size: 9.5px; font-weight: 700; color: #000000; margin: 0 0 2px; display: flex; justify-content: center; gap: 20px; }
+.mt-school-phone { color: #0066cc !important; text-decoration: underline !important; font-weight: 700; }
+.mt-motto { font-size: 10.5px; font-weight: 800; color: #000000; margin: 2px 0 3px; font-family: "Times New Roman", Times, serif; }
+.mt-term-title { font-size: 11px; font-weight: 800; color: #000000; margin-top: 2px; text-decoration: underline; letter-spacing: 0.3px; }
+.mt-photo-col { text-align: right; }
+.mt-photo { width: 82px; height: 98px; object-fit: cover; border: 1px solid #000000; display: block; margin-left: auto; }
+.mt-photo-placeholder { width: 82px; height: 98px; border: 1px solid #999999; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #666666; text-align: center; margin-left: auto; background: #fafafa; }
+
+.mt-student-bio { text-align: left; font-size: 10.5px; font-weight: 700; line-height: 1.6; margin: 4px 0 6px; color: #000000; }
+.mt-section-heading { text-align: center; font-size: 10.5px; font-weight: 800; letter-spacing: 0.5px; color: #000000; margin: 4px 0 4px; }
+
+.mt-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 9.5px; background: transparent; }
+.mt-table th, .mt-table td { border: 1px solid #000000; padding: 2.5px 3px; text-align: center; color: #000000; line-height: 1.15; }
+.mt-table th { font-weight: 800; background: transparent; font-size: 9px; }
+.mt-table td.sub-name { text-align: left; font-weight: 600; padding-left: 4px; }
+.mt-table tr.mt-total-row td { font-weight: 800; background: transparent; }
+
+.mt-scale-title { text-align: center; font-size: 10px; font-weight: 800; color: #000000; margin: 6px 0 3px; letter-spacing: 0.5px; }
+.mt-grade-scale-table { width: 82%; margin: 0 auto 6px; border-collapse: collapse; font-size: 9px; background: transparent; }
+.mt-grade-scale-table td { border: 1px solid #000000; padding: 2px 4px; text-align: center; color: #000000; }
+.mt-ident-scale-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 9px; background: transparent; }
+.mt-ident-scale-table th, .mt-ident-scale-table td { border: 1px solid #000000; padding: 2px 4px; text-align: center; color: #000000; }
+.mt-ident-scale-table th { font-weight: 800; background: transparent; }
+
+.mt-comments-area { margin-top: 8px; display: flex; flex-direction: column; gap: 7px; font-size: 9.5px; color: #000000; }
+.mt-comment-line { display: flex; align-items: baseline; gap: 4px; width: 100%; }
+.mt-comment-lead { white-space: nowrap; }
+.mt-comment-text { flex-shrink: 0; }
+.mt-comment-dots { flex-grow: 1; border-bottom: 1.5px dotted #000000; margin: 0 4px; min-width: 60px; }
+.mt-comment-sign-lbl { white-space: nowrap; margin-left: 8px; }
+.mt-comment-sign-dots { width: 120px; border-bottom: 1.5px dotted #000000; margin-left: 4px; }
+
 /* A-Level Legacy styles retained for A-Level view */
 .rc-card-banner { background: #1d4f91; color: #ffffff; text-align: center; font-weight: 800; font-size: 13px; padding: 4px; letter-spacing: 1px; margin-bottom: 10px; }
 .rc-meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 12px; background: #f3f4f6; border: 1px solid #d1d5db; padding: 8px 12px; margin-bottom: 12px; font-size: 11px; }

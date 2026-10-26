@@ -504,6 +504,173 @@ export function SingleReportCard({ student, school }) {
   )
 }
 
+/* =====================================================================
+   Mid-Term Report Card (A4) — columns: Subject | 20 (Mid-Term) | C1 | AVG | IDENT | DESCRIPTOR | TR INITIALS
+   ===================================================================== */
+export function MidTermReportCard({ student, school }) {
+  const report = student.report || {}
+  const subjects = report.subjects || []
+  const isALevel = /s\.?[56]|senior\s*[56]/i.test(report.class_name || student.stream_label || '')
+  const logoSrc = '/kiyingi_logo.png'
+  const studentPhoto = student.photo ? mediaUrl(student.photo) : null
+
+  return (
+    <article className="mt-report-page">
+      {/* Top Header */}
+      <div className="mt-header">
+        <div className="mt-logo-col">
+          <img src={logoSrc} alt="School Crest" className="mt-logo" onError={(e) => { e.target.style.display = 'none' }} />
+        </div>
+        <div className="mt-title-area">
+          <h2 className="mt-school-name">{school?.name || 'KIYINGI MEMORIAL SECONDARY SCHOOL'}</h2>
+          <div className="mt-school-location">3KM ALONG WABUSAANA-KYAMBOGO ROAD FROM KAKOOGE TOWNSHIP</div>
+          <div className="mt-school-meta">
+            <span>P.O.BOX KAMPALA UGANDA</span>
+            <span className="mt-school-phone">TEL:0772511555/0701511555</span>
+          </div>
+          <div className="mt-motto">**Search for wisdom**</div>
+          <div className="mt-term-title">
+            <u>MID-TERM ASSESSMENT REPORT CARD {(report.term_name || 'TWO').toUpperCase()} — {report.year_name || '2026'}</u>
+          </div>
+        </div>
+        <div className="mt-photo-col">
+          {studentPhoto ? (
+            <img src={studentPhoto} alt={student.name} className="mt-photo" />
+          ) : (
+            <div className="mt-photo-placeholder">STUDENT<br />PHOTO</div>
+          )}
+        </div>
+      </div>
+
+      {/* Student Bio */}
+      <div className="mt-student-bio">
+        <div><b>NAME:</b> {student.name?.toUpperCase()}</div>
+        <div><b>CLASS:</b> {(report.class_name || student.stream_label || '').toUpperCase()}</div>
+        <div><b>INDEX No:</b> {student.index_no}</div>
+        <div><b>GENDER:</b> {student.gender === 'M' ? 'Male' : student.gender === 'F' ? 'Female' : '—'}</div>
+        <div><b>TERM:</b> {report.term_name || 'Term 1'}</div>
+      </div>
+
+      {/* Performance Table */}
+      <div className="mt-section-heading">PERFORMANCE RECORDS — MID-TERM</div>
+      <table className="mt-table">
+        <thead>
+          <tr>
+            <th style={{ width: '34%', textAlign: 'left' }}>SUBJECT</th>
+            <th style={{ width: '14%' }}>20</th>
+            <th style={{ width: '10%' }}>C1</th>
+            <th style={{ width: '11%' }}>AVG</th>
+            <th style={{ width: '9%' }}>IDENT</th>
+            <th style={{ width: '12%' }}>DESCRIPTOR</th>
+            <th style={{ width: '10%' }}>TR INITIALS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(() => {
+            const identList = []
+            const rows = subjects.length ? subjects.map((sub, i) => {
+              const rawComps = sub.raw_components || {}
+              const comps = sub.components || {}
+              const botVal = compVal([rawComps, comps], 'BOT', 'BEGINNING_OF_TERM', 'B_O_T')
+              const midVal = compVal([rawComps, comps], 'MID', 'MIDTERM', 'MID_TERM', 'M_T', 'MID-TERM')
+              const col20 = midVal != null ? midVal : null
+
+              const c1Raw = sub.c1 != null ? Number(sub.c1) : (col20 != null ? (col20 / 20.0) * 3.0 : (comps['C1'] != null ? Number(comps['C1']) : null))
+              const c1 = c1Raw != null ? Number(c1Raw.toFixed(1)) : null
+              const avgRaw = c1 != null ? c1 : null
+              const avg = avgRaw != null ? Number(avgRaw.toFixed(1)) : null
+              const subIdInfo = getIdentifierInfo(avg != null ? avg : c1)
+              if (subIdInfo.num != null) identList.push(subIdInfo.num)
+
+              const initials = sub.teacher_initials || sub.initials || 'KM'
+
+              return (
+                <tr key={i}>
+                  <td className="sub-name">{sub.subject}</td>
+                  <td>{col20 != null ? col20 : ''}</td>
+                  <td>{c1 != null ? c1 : ''}</td>
+                  <td>{avg != null ? avg : ''}</td>
+                  <td><b>{subIdInfo.ident !== '—' ? subIdInfo.ident : ''}</b></td>
+                  <td style={{ fontSize: '9px', textAlign: 'center', fontWeight: 600 }}>{subIdInfo.desc !== '—' ? subIdInfo.desc : ''}</td>
+                  <td>{initials}</td>
+                </tr>
+              )
+            }) : (
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 12 }}>No Mid-Term assessment marks recorded for this term.</td></tr>
+            )
+
+            const overallAvgVal = subjects.length ? (identList.length ? (subjects.reduce((acc, _, idx) => acc + (identList[idx] || 0), 0) / subjects.length).toFixed(1) : '') : ''
+
+            return (
+              <>
+                {rows}
+                <tr className="mt-total-row">
+                  <td style={{ fontWeight: 700, textAlign: 'left' }}>AVERAGE</td>
+                  <td></td><td></td>
+                  <td style={{ fontWeight: 700 }}>{overallAvgVal}</td>
+                  <td></td><td></td><td></td>
+                </tr>
+              </>
+            )
+          })()}
+        </tbody>
+      </table>
+
+      {/* Grading Scale */}
+      <div style={{ marginTop: 6 }}>
+        <div className="mt-scale-title">GRADING SCALE</div>
+        <table className="mt-grade-scale-table">
+          <tbody>
+            <tr>
+              {GRADING_SCALE.map((g) => <td key={g.grade}>{g.range}</td>)}
+            </tr>
+            <tr>
+              {GRADING_SCALE.map((g) => <td key={g.grade}><b>{g.grade}</b></td>)}
+            </tr>
+          </tbody>
+        </table>
+
+        <table className="mt-ident-scale-table">
+          <thead>
+            <tr>
+              <th style={{ width: '30%' }}>IDENTIFIER</th>
+              <th style={{ width: '35%' }}>SCORE RANGE</th>
+              <th style={{ width: '35%' }}>DESCRIPTION</th>
+            </tr>
+          </thead>
+          <tbody>
+            {IDENTIFIER_SCALE.map((sc) => (
+              <tr key={sc.ident}>
+                <td><b>{sc.ident}</b></td>
+                <td>{sc.range}</td>
+                <td><b>{sc.desc}</b></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Comments & Signatures */}
+        <div className="mt-comments-area">
+          <div className="mt-comment-line">
+            <span className="mt-comment-lead"><b>HEAD TEACHER'S COMMENT:</b></span>
+            <span className="mt-comment-text">{report.head_comment || ''}</span>
+            <span className="mt-comment-dots"></span>
+            <span className="mt-comment-sign-lbl"><b>SIGN:</b></span>
+            <span className="mt-comment-sign-dots"></span>
+          </div>
+          <div className="mt-comment-line">
+            <span className="mt-comment-lead"><b>CLASS TEACHER'S COMMENT:</b></span>
+            <span className="mt-comment-text">{report.teacher_comment || ''}</span>
+            <span className="mt-comment-dots"></span>
+            <span className="mt-comment-sign-lbl"><b>SIGN:</b></span>
+            <span className="mt-comment-sign-dots"></span>
+          </div>
+        </div>
+      </div>
+    </article>
+  )
+}
+
 export function AdminStudentReportsPage() {
   const { school } = useApp()
   const years = useFetch('/academics/years/')
@@ -522,6 +689,7 @@ export function AdminStudentReportsPage() {
   const [downloadingPdfId, setDownloadingPdfId] = useState(null)
   const [alertMsg, setAlertMsg] = useState({ kind: '', text: '' })
   const [printStudents, setPrintStudents] = useState(null)
+  const [reportType, setReportType] = useState('end_of_term')
 
   // Initialize active year & term
   useEffect(() => {
@@ -788,6 +956,14 @@ export function AdminStudentReportsPage() {
 
         {/* Bulk Generation & Printing Buttons */}
         <div className="row" style={{ gap: 8 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="radio" name="report-type" value="end_of_term" checked={reportType === 'end_of_term'} onChange={() => setReportType('end_of_term')} />
+            End of Term Report Card
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="radio" name="report-type" value="mid_term" checked={reportType === 'mid_term'} onChange={() => setReportType('mid_term')} />
+            Mid-Term Report Card
+          </label>
           <button
             className="btn primary"
             disabled={downloadingZip || !filteredStudents.length}
@@ -937,7 +1113,9 @@ export function AdminStudentReportsPage() {
 
           <div className="report-card-print-container">
             {printStudents.map((st) => (
-              <SingleReportCard key={st.id} student={st} school={school} />
+              <div key={st.id} style={{ pageBreakAfter: 'always' }}>
+                {reportType === 'mid_term' ? <MidTermReportCard student={st} school={school} /> : <SingleReportCard student={st} school={school} />}
+              </div>
             ))}
           </div>
         </div>
