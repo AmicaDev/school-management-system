@@ -568,6 +568,7 @@ export function MidTermReportCard({ student, school }) {
         <tbody>
           {(() => {
             const identList = []
+            const avgList = []
             const rows = subjects.length ? subjects.map((sub, i) => {
               const rawComps = sub.raw_components || {}
               const comps = sub.components || {}
@@ -581,6 +582,7 @@ export function MidTermReportCard({ student, school }) {
               const avg = avgRaw != null ? Number(avgRaw.toFixed(1)) : null
               const subIdInfo = getIdentifierInfo(avg != null ? avg : c1)
               if (subIdInfo.num != null) identList.push(subIdInfo.num)
+              if (avg != null) avgList.push(avg)
 
               const initials = sub.teacher_initials || sub.initials || 'KM'
 
@@ -599,7 +601,7 @@ export function MidTermReportCard({ student, school }) {
               <tr><td colSpan={7} style={{ textAlign: 'center', padding: 12 }}>No Mid-Term assessment marks recorded for this term.</td></tr>
             )
 
-            const overallAvgVal = subjects.length ? (identList.length ? (subjects.reduce((acc, _, idx) => acc + (identList[idx] || 0), 0) / subjects.length).toFixed(1) : '') : ''
+            const overallAvgVal = avgList.length ? (avgList.reduce((a, b) => a + b, 0) / avgList.length).toFixed(1) : ''
 
             return (
               <>
