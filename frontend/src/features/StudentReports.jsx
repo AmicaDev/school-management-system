@@ -52,6 +52,20 @@ function remarkPreview(g) {
   return { A: 'EXCELLENT', B: 'VERY GOOD', C: 'GOOD', D: 'FAIR', E: 'POOR' }[g] || ''
 }
 
+// Look up a component value case-insensitively across raw_components and components objects.
+// Exam type codes (BOT, MID, FINAL, etc.) may arrive with varying key casing.
+const compVal = (objs, ...cands) => {
+  for (const obj of objs) {
+    if (!obj || typeof obj !== 'object') continue
+    for (const cand of cands) {
+      if (obj[cand] != null) return Number(obj[cand])
+      const ik = Object.keys(obj).find((k) => String(k).toUpperCase() === String(cand).toUpperCase())
+      if (ik && obj[ik] != null) return Number(obj[ik])
+    }
+  }
+  return null
+}
+
 export function SingleReportCard({ student, school }) {
   const report = student.report || {}
   const subjects = report.subjects || []
@@ -209,12 +223,12 @@ export function SingleReportCard({ student, school }) {
                 const rawComps = sub.raw_components || {}
                 const comps = sub.components || {}
                 // 20% column: Mid-Term marks entered out of 20
-                const botVal = rawComps['BOT'] != null ? Number(rawComps['BOT']) : (comps['BOT'] != null ? Number(comps['BOT']) : null)
-                const midVal = rawComps['MID'] != null ? Number(rawComps['MID']) : (rawComps['MIDTERM'] != null ? Number(rawComps['MIDTERM']) : (comps['MID'] != null ? Number(comps['MID']) : null))
+                const botVal = compVal([rawComps, comps], 'BOT', 'BEGINNING_OF_TERM', 'B_O_T')
+                const midVal = compVal([rawComps, comps], 'MID', 'MIDTERM', 'MID_TERM', 'M_T', 'MID-TERM')
                 const col20 = midVal != null ? midVal : null
 
                 // 80% column: End of term examination (out of 80)
-                const eotVal = rawComps['FINAL'] != null ? Number(rawComps['FINAL']) : (rawComps['EOT'] != null ? Number(rawComps['EOT']) : (comps['FINAL'] != null ? Number(comps['FINAL']) : (comps['EOT'] != null ? Number(comps['EOT']) : null)))
+                const eotVal = compVal([rawComps, comps], 'FINAL', 'EOT', 'END_OF_TERM', 'END', 'E_O_T')
 
                 // 100% column: Mid-Term (out of 20) + End of term (out of 80) = FINAL RESULTS out of 100
                 // BOT is optional and does not contribute to the final term results
@@ -307,8 +321,8 @@ export function SingleReportCard({ student, school }) {
         subjects.forEach((sub) => {
           const rawComps = sub.raw_components || {}
           const comps = sub.components || {}
-          const botVal = rawComps['BOT'] != null ? Number(rawComps['BOT']) : (comps['BOT'] != null ? Number(comps['BOT']) : null)
-          const midVal = rawComps['MID'] != null ? Number(rawComps['MID']) : (rawComps['MIDTERM'] != null ? Number(rawComps['MIDTERM']) : (comps['MID'] != null ? Number(comps['MID']) : null))
+          const botVal = compVal([rawComps, comps], 'BOT', 'BEGINNING_OF_TERM', 'B_O_T')
+          const midVal = compVal([rawComps, comps], 'MID', 'MIDTERM', 'MID_TERM', 'M_T', 'MID-TERM')
           const col20 = midVal != null ? midVal : null
           const c1Raw = sub.c1 != null ? Number(sub.c1) : (col20 != null ? (col20 / 20.0) * 3.0 : (comps['C1'] != null ? Number(comps['C1']) : null))
           const c1 = c1Raw != null ? Number(c1Raw.toFixed(1)) : null
@@ -351,9 +365,9 @@ export function SingleReportCard({ student, school }) {
         subjects.forEach((sub) => {
           const rawComps = sub.raw_components || {}
           const comps = sub.components || {}
-          const botVal = rawComps['BOT'] != null ? Number(rawComps['BOT']) : (comps['BOT'] != null ? Number(comps['BOT']) : null)
-          const midVal = rawComps['MID'] != null ? Number(rawComps['MID']) : (rawComps['MIDTERM'] != null ? Number(rawComps['MIDTERM']) : (comps['MID'] != null ? Number(comps['MID']) : null))
-          const col20 = midVal != null ? midVal : null
+        const botVal = compVal([rawComps, comps], 'BOT', 'BEGINNING_OF_TERM', 'B_O_T')
+        const midVal = compVal([rawComps, comps], 'MID', 'MIDTERM', 'MID_TERM', 'M_T', 'MID-TERM')
+        const col20 = midVal != null ? midVal : null
           const c1Raw = sub.c1 != null ? Number(sub.c1) : (col20 != null ? (col20 / 20.0) * 3.0 : (comps['C1'] != null ? Number(comps['C1']) : null))
           const c1 = c1Raw != null ? Number(c1Raw.toFixed(1)) : null
           const c2Raw = sub.c2 != null ? Number(sub.c2) : (botVal != null ? (botVal / 20.0) * 3.0 : null)
