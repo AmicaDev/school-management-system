@@ -38,3 +38,10 @@ export const sendBrowserNotification = (title, options = {}) => {
   }
 }
 
+export default {
+  isNotificationSupported,
+  getNotificationPermission,
+  requestNotificationPermission,
+  sendBrowserNotification
+}
+

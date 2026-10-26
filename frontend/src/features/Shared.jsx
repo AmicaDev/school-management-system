@@ -9,7 +9,7 @@ import { enqueue } from '../offline/queue'
 import { Alert, Badge, Empty, ErrorState, Skeleton, Table, Tabs, fmtDate, fmtDateTime } from '../components/ui'
 import ResourcePage from './ResourcePage'
 import { R } from './resources'
-import { getNotificationPermission, isNotificationSupported, requestNotificationPermission } from '../services/notifications'
+import { getNotificationPermission, isNotificationSupported, requestNotificationPermission } from '../services/notifications.js'
 
 export const Chart = ({ children, height = 260 }) => <div className="chart-box" style={{ height }}><ResponsiveContainer>{children}</ResponsiveContainer></div>
 const AXIS = { stroke: 'var(--muted)', fontSize: 12 }
