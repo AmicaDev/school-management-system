@@ -4,7 +4,7 @@ import { api, tokens } from '../services/api'
 const AuthCtx = createContext(null)
 export const useAuth = () => useContext(AuthCtx)
 
-export const HOME = { ADMIN: '/admin', TEACHER: '/teacher', PARENT: '/parent', DEVELOPER: '/developer' }
+export const HOME = { ADMIN: '/admin', TEACHER: '/teacher', PARENT: '/parent', DEVELOPER: '/developer', BURSAR: '/bursar' }
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)

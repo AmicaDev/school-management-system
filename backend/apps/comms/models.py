@@ -30,6 +30,7 @@ class Notification(models.Model):
         ACADEMIC = "ACADEMIC", "Academic"
         ATTENDANCE = "ATTENDANCE", "Attendance"
         RESULTS = "RESULTS", "Results"
+        FINANCE = "FINANCE", "Finance"
         EVENT = "EVENT", "Event"
         ANNOUNCEMENT = "ANNOUNCEMENT", "Announcement"
         SYSTEM = "SYSTEM", "System"

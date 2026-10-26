@@ -11,6 +11,7 @@ const termsList = { endpoint: '/academics/terms/', label: 'name' }
 const yearsList = { endpoint: '/academics/years/', label: 'name' }
 const subjects = { endpoint: '/academics/subjects/', label: (s) => `${s.code} - ${s.name}`, params: { is_archived: false } }
 const teachersByUser = { endpoint: '/teachers/', value: 'user_id', label: 'full_name' }
+const feeCategories = { endpoint: '/finance/categories/', label: 'name' }
 
 export const R = {
   students: {
@@ -154,10 +155,96 @@ export const R = {
       { name: 'start_date', label: 'Start date', type: 'date', required: true }, { name: 'end_date', label: 'End date', type: 'date' }, { name: 'description', label: 'Description', type: 'textarea' }] },
   users: { title: 'User accounts', singular: 'user', endpoint: '/auth/users/', removeLabel: 'Deactivate', canPermanentDelete: true,
     columns: [{ key: 'full_name', label: 'Name' }, { key: 'username', label: 'Username' }, { key: 'role', label: 'Role', render: badge('role') }, { key: 'is_active', label: 'Active', render: yes('is_active') }],
-    filters: [{ name: 'role', label: 'All roles', options: [['ADMIN', 'Admin'], ['TEACHER', 'Teacher'], ['PARENT', 'Parent']] }],
+    filters: [{ name: 'role', label: 'All roles', options: [['ADMIN', 'Admin'], ['BURSAR', 'Bursar'], ['TEACHER', 'Teacher'], ['PARENT', 'Parent']] }],
     fields: [{ name: 'username', label: 'Username', required: true }, { name: 'first_name', label: 'First name' }, { name: 'last_name', label: 'Last name' }, { name: 'email', label: 'Email', type: 'email' }, { name: 'phone', label: 'Phone' },
-      { name: 'role', label: 'Role', type: 'select', required: true, options: [['ADMIN', 'Admin'], ['TEACHER', 'Teacher'], ['PARENT', 'Parent']] },
+      { name: 'role', label: 'Role', type: 'select', required: true, options: [['ADMIN', 'Admin'], ['BURSAR', 'Bursar'], ['TEACHER', 'Teacher'], ['PARENT', 'Parent']] },
       { name: 'password', label: 'Password', type: 'password', required: true, help: 'Leave blank on edit to keep the current password.' }, { name: 'is_active', label: 'Active', type: 'checkbox', default: true }] },
+  feeCategories: { title: 'Fee Categories', singular: 'fee category', endpoint: '/finance/categories/',
+    columns: [
+      { key: 'name', label: 'Category Name' },
+      { key: 'code', label: 'Code' },
+      { key: 'description', label: 'Description' },
+      { key: 'is_active', label: 'Active', render: yes('is_active') }
+    ],
+    fields: [
+      { name: 'name', label: 'Name', required: true },
+      { name: 'code', label: 'Code (e.g. TUITION, BOARDING)', required: true },
+      { name: 'description', label: 'Description', type: 'textarea' },
+      { name: 'is_active', label: 'Active', type: 'checkbox', default: true }
+    ]
+  },
+  feeStructures: { title: 'Fee Structures', singular: 'fee structure', endpoint: '/finance/structures/',
+    filters: [
+      { name: 'school_class', label: 'All classes', options: schoolClasses },
+      { name: 'term', label: 'All terms', options: termsList },
+      { name: 'category', label: 'All categories', options: feeCategories }
+    ],
+    columns: [
+      { key: 'class_name', label: 'Class' },
+      { key: 'term_name', label: 'Term' },
+      { key: 'category_name', label: 'Fee Category' },
+      { key: 'amount', label: 'Amount (UGX)', render: (r) => `UGX ${Number(r.amount || 0).toLocaleString()}` },
+      { key: 'section', label: 'Section' },
+      { key: 'description', label: 'Notes' }
+    ],
+    fields: [
+      { name: 'school_class', label: 'Class', type: 'select', required: true, options: schoolClasses },
+      { name: 'term', label: 'Term (Leave empty for annual/all terms)', type: 'select', options: termsList },
+      { name: 'category', label: 'Fee Category', type: 'select', required: true, options: feeCategories },
+      { name: 'amount', label: 'Amount (UGX)', type: 'number', required: true },
+      { name: 'section', label: 'Section', type: 'select', options: [['ALL', 'All Sections'], ['DAY', 'Day Only'], ['BOARDING', 'Boarding Only']] },
+      { name: 'description', label: 'Notes / Details', type: 'textarea' }
+    ]
+  },
+  expenses: { title: 'School Expenses', singular: 'expense', endpoint: '/finance/expenses/',
+    filters: [
+      { name: 'category', label: 'All categories', options: [
+        ['SALARIES', 'Staff Salaries & Allowances'],
+        ['MAINTENANCE', 'Repairs & Maintenance'],
+        ['UTILITIES', 'Utilities (Water, Power, Internet)'],
+        ['FOOD_SUPPLIES', 'Food & Kitchen Supplies'],
+        ['ADMINISTRATION', 'Administrative Expenses'],
+        ['EQUIPMENT', 'Equipment & Furniture'],
+        ['ACADEMIC', 'Academic & Exams Materials'],
+        ['TRANSPORT', 'Vehicle Fuel & Transport'],
+        ['OTHER', 'Other Expenses']
+      ]}
+    ],
+    columns: [
+      { key: 'date', label: 'Date', render: (r) => fmtDate(r.date) },
+      { key: 'title', label: 'Description' },
+      { key: 'category', label: 'Category' },
+      { key: 'recipient', label: 'Paid To' },
+      { key: 'payment_method', label: 'Method' },
+      { key: 'amount', label: 'Amount (UGX)', render: (r) => `UGX ${Number(r.amount || 0).toLocaleString()}` },
+      { key: 'approved_by_name', label: 'Approved By' }
+    ],
+    fields: [
+      { name: 'title', label: 'Title / Description', required: true },
+      { name: 'category', label: 'Expense Category', type: 'select', required: true, options: [
+        ['SALARIES', 'Staff Salaries & Allowances'],
+        ['MAINTENANCE', 'Repairs & Maintenance'],
+        ['UTILITIES', 'Utilities (Water, Power, Internet)'],
+        ['FOOD_SUPPLIES', 'Food & Kitchen Supplies'],
+        ['ADMINISTRATION', 'Administrative Expenses'],
+        ['EQUIPMENT', 'Equipment & Furniture'],
+        ['ACADEMIC', 'Academic & Exams Materials'],
+        ['TRANSPORT', 'Vehicle Fuel & Transport'],
+        ['OTHER', 'Other Expenses']
+      ]},
+      { name: 'amount', label: 'Amount (UGX)', type: 'number', required: true },
+      { name: 'date', label: 'Date of Expenditure', type: 'date', required: true },
+      { name: 'payment_method', label: 'Payment Method', type: 'select', required: true, options: [
+        ['CASH', 'Cash'],
+        ['BANK', 'Bank Transfer'],
+        ['MOBILE_MONEY', 'Mobile Money'],
+        ['OTHER', 'Other']
+      ]},
+      { name: 'recipient', label: 'Paid To (Recipient)', required: true },
+      { name: 'receipt_voucher', label: 'Receipt / Voucher Ref' },
+      { name: 'notes', label: 'Additional Notes', type: 'textarea' }
+    ]
+  },
   attendance: { title: 'Attendance records', endpoint: '/attendance/', readOnly: true, ordering: '-date',
     filters: [
       { name: 'stream__school_class', label: 'All classes', options: schoolClasses },

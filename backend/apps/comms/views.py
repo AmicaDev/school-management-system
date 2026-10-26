@@ -73,6 +73,11 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     def unread_count(self, request):
         return Response({"count": self.get_queryset().filter(is_read=False).count()})
 
+    @action(detail=True, methods=["post", "delete"])
+    def dismiss(self, request, pk=None):
+        self.get_queryset().filter(pk=pk).delete()
+        return Response({"ok": True})
+
 
 class MessageSerializer(serializers.ModelSerializer):
     sender_name = serializers.CharField(source="sender.full_name", read_only=True)

@@ -850,16 +850,18 @@ class TeacherAssignmentTests(Base):
 
     def test_supports_multiple_teachers_in_same_class_and_subject(self):
         self.client.force_authenticate(user=self.admin)
-        # t1 is already assigned in setUp. Assign t2 to the same stream and subject paper.
+        # t1 is already assigned to maths paper 1 in setUp. Enable paper 2 and assign t2 to paper 2.
+        self.maths.number_of_papers = 2
+        self.maths.save()
         r = self.client.post("/api/v1/academics/assignments/", {
             "teacher": self.t2.id,
             "stream": self.stream.id,
             "subject": self.maths.id,
-            "paper_number": 1,
+            "paper_number": 2,
         }, format="json")
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(
-            TeachingAssignment.objects.filter(stream=self.stream, subject=self.maths, paper_number=1, is_active=True).count(),
+            TeachingAssignment.objects.filter(stream=self.stream, subject=self.maths, is_active=True).count(),
             2,
         )
 

@@ -104,16 +104,22 @@ class TeachingAssignmentSerializer(serializers.ModelSerializer):
                 "paper_number": f"This subject has only {subject.number_of_papers} paper(s)."
             })
 
-        # Prevent accidental duplicate active assignments for the same teacher
-        if is_active and teacher and stream and subject:
+        # Prevent accidental duplicate active assignments for the same stream, subject, and paper
+        if is_active and stream and subject:
             dupes = m.TeachingAssignment.objects.filter(
-                teacher=teacher, stream=stream, subject=subject, paper_number=paper_number, is_active=True
+                stream=stream, subject=subject, paper_number=paper_number, is_active=True
             )
             if self.instance:
                 dupes = dupes.exclude(pk=self.instance.pk)
             if dupes.exists():
+                existing = dupes.first()
+                teacher_id = getattr(teacher, "id", teacher)
+                if teacher_id and existing.teacher_id == teacher_id:
+                    raise serializers.ValidationError({
+                        "teacher": "This teacher is already actively assigned to this class and subject paper."
+                    })
                 raise serializers.ValidationError({
-                    "teacher": "This teacher is already actively assigned to this class and subject paper."
+                    "stream": f"This subject paper is already actively assigned to {existing.teacher.full_name}."
                 })
         return attrs
 

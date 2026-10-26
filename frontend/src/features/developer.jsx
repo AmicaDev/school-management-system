@@ -297,6 +297,16 @@ export function DevBackup() {
     } finally { setBusy(false) }
   }
 
+  const testRestore = async (filename) => {
+    setBusy(true); setNotice({ kind: 'info', text: `Running restoration verification test for ${filename}…` })
+    try {
+      const { data: res } = await api.post('/developer/backup/verify/', { filename })
+      setNotice({ kind: 'success', text: res.detail })
+    } catch (e) {
+      setNotice({ kind: 'error', text: errorMessage(e) })
+    } finally { setBusy(false) }
+  }
+
   const sizeMB = (b) => (b == null ? '—' : `${(b / (1024 * 1024)).toFixed(2)} MB`)
 
   return (
@@ -314,7 +324,12 @@ export function DevBackup() {
              { key: 'name', label: 'Backup file' },
              { key: 'size_bytes', label: 'Size', render: (r) => sizeMB(r.size_bytes) },
              { key: 'created_at', label: 'Created', render: (r) => fmtDateTime(r.created_at) },
-             { key: 'action', label: '', render: (r) => <a className="btn sm" href={r.download_url} download={r.name}>⬇ Download</a> },
+             { key: 'action', label: '', render: (r) => (
+               <div className="row" style={{ gap: 6 }}>
+                 <button className="btn sm" disabled={busy} onClick={() => testRestore(r.name)}>🧪 Test Restore</button>
+                 <a className="btn sm" href={r.download_url} download={r.name}>⬇ Download</a>
+               </div>
+             ) },
            ]} rows={backups} />
          </div>}
       </section>

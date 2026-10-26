@@ -42,6 +42,8 @@ pnpm-debug.log*
 
 # Hosting
 .vercel
+.kilo/
+.worktreeinclude
 
 # Logs and local data
 *.log

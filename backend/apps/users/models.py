@@ -15,6 +15,7 @@ class User(AbstractUser):
         ADMIN = "ADMIN", "Admin"
         TEACHER = "TEACHER", "Teacher"
         PARENT = "PARENT", "Parent"
+        BURSAR = "BURSAR", "Bursar"
         DEVELOPER = "DEVELOPER", "Developer"
 
     email = models.EmailField(blank=True)

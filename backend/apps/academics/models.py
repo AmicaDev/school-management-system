@@ -137,9 +137,9 @@ class TeachingAssignment(models.Model):
         ordering = ["-is_active", "stream__school_class__order", "stream__name", "subject__name", "paper_number"]
         constraints = [
             models.UniqueConstraint(
-                fields=["teacher", "stream", "subject", "paper_number"],
+                fields=["stream", "subject", "paper_number"],
                 condition=models.Q(is_active=True),
-                name="uniq_active_teacher_assignment"
+                name="uniq_active_stream_subject_paper"
             )
         ]
 

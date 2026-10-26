@@ -20,9 +20,11 @@ def roles_required(*roles):
 IsAdmin = roles_required(R.ADMIN)
 IsTeacher = roles_required(R.TEACHER)
 IsParent = roles_required(R.PARENT)
+IsBursar = roles_required(R.BURSAR)
 IsDeveloper = roles_required(R.DEVELOPER)
 IsAdminOrTeacher = roles_required(R.ADMIN, R.TEACHER)
-IsSchoolUser = roles_required(R.ADMIN, R.TEACHER, R.PARENT)
+IsFinanceUser = roles_required(R.ADMIN, R.BURSAR)
+IsSchoolUser = roles_required(R.ADMIN, R.TEACHER, R.PARENT, R.BURSAR)
 
 
 class AdminWriteAuthenticatedRead(BasePermission):

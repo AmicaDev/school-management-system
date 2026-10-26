@@ -15,13 +15,14 @@ const Register = lz(() => import('./pages/Auth'), 'Register')
 const ForgotPassword = lz(() => import('./pages/Auth'), 'ForgotPassword')
 const ResetPassword = lz(() => import('./pages/Auth'), 'ResetPassword')
 const Logout = lz(() => import('./pages/Auth'), 'Logout')
+const BursarLogin = lz(() => import('./pages/BursarLogin'))
 const NotFound = lz(() => import('./pages/ErrorPages'), 'NotFound')
 const Forbidden = lz(() => import('./pages/ErrorPages'), 'Forbidden')
 const ServerError = lz(() => import('./pages/ErrorPages'), 'ServerError')
 const OfflinePage = lz(() => import('./pages/ErrorPages'), 'OfflinePage')
 const Maintenance = lz(() => import('./pages/ErrorPages'), 'Maintenance')
 const A = {}
-;['AdminDashboard', 'ClassesPage', 'SubjectsPage', 'AcademicsPage', 'GradingPage', 'RecycleBinPage', 'SchoolSettings', 'ImportPanel', 'AdminStudentReportsPage'].forEach((n) => { A[n] = lz(() => import('./features/admin'), n) })
+;['AdminDashboard', 'ClassesPage', 'SubjectsPage', 'TeacherAssignmentsPage', 'AcademicsPage', 'GradingPage', 'RecycleBinPage', 'SchoolSettings', 'ImportPanel', 'AdminStudentReportsPage'].forEach((n) => { A[n] = lz(() => import('./features/admin'), n) })
 const S = {}
 ;['StudentProfile', 'ClassResults', 'NotificationsPage', 'EventsPage', 'Enquiries', 'ParentProfile'].forEach((n) => { S[n] = lz(() => import('./features/Shared'), n) })
 const T = {}
@@ -30,6 +31,10 @@ const P = {}
 ;['ParentDashboard', 'ChildrenList', 'ParentAttendance', 'ParentResults', 'ParentPerformance'].forEach((n) => { P[n] = lz(() => import('./features/parent'), n) })
 const D = {}
 ;['DevDashboard', 'DevErrors', 'DevLogs', 'DevTests', 'DevDatabase', 'DevApi', 'DevPwa', 'DevSync', 'DevAdminAccounts', 'DevMaintenance', 'DevUpdates', 'DevAudit', 'DevBackup'].forEach((n) => { D[n] = lz(() => import('./features/developer'), n) })
+const F = {}
+;['FinanceOverview', 'RecordPaymentPage', 'StudentAccountsPage', 'ReceiptsHistoryPage', 'FeeStructuresPage', 'FeeCategoriesPage', 'ExpensesPage', 'FinancialReportsPage'].forEach((n) => { F[n] = lz(() => import('./features/finance'), n) })
+const B = {}
+;['BursarDashboard', 'BursarMyCollections'].forEach((n) => { B[n] = lz(() => import('./features/bursar'), n) })
 
 const rp = (cfg) => <ResourcePage cfg={cfg} />
 const StudentsPage = () => {
@@ -85,6 +90,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/privacy" element={<Legal kind="privacy" />} /><Route path="/terms" element={<Legal kind="terms" />} />
         <Route path="/login" element={<RedirectIfAuthed><Login /></RedirectIfAuthed>} />
+        <Route path="/bursar/login" element={<RedirectIfAuthed><BursarLogin /></RedirectIfAuthed>} />
         <Route path="/register" element={<Register />} /><Route path="/forgot-password" element={<ForgotPassword />} /><Route path="/reset-password" element={<ResetPassword />} /><Route path="/logout" element={<Logout />} />
         <Route path="/403" element={<Forbidden />} /><Route path="/500" element={<ServerError />} /><Route path="/offline" element={<OfflinePage />} /><Route path="/maintenance" element={<Maintenance />} />
 
@@ -97,7 +103,26 @@ export default function App() {
           <Route path="/admin/attendance" element={rp(R.attendance)} /><Route path="/admin/results" element={<S.ClassResults downloads={false} />} /><Route path="/admin/reports" element={<A.AdminStudentReportsPage />} /><Route path="/admin/student-reports" element={<A.AdminStudentReportsPage />} />
           <Route path="/admin/timetable" element={rp(R.timetable)} /><Route path="/admin/events" element={rp(R.events)} /><Route path="/admin/notifications" element={<S.NotificationsPage />} />
           <Route path="/admin/enquiries" element={<S.Enquiries />} /><Route path="/admin/analytics" element={<A.AdminDashboard view="analytics" />} />
+          <Route path="/admin/finance" element={<F.FinanceOverview />} />
+          <Route path="/admin/finance/payments/new" element={<F.RecordPaymentPage />} />
+          <Route path="/admin/finance/accounts" element={<F.StudentAccountsPage />} />
+          <Route path="/admin/finance/receipts" element={<F.ReceiptsHistoryPage />} />
+          <Route path="/admin/finance/structures" element={<F.FeeStructuresPage />} />
+          <Route path="/admin/finance/expenses" element={<F.ExpensesPage />} />
+          <Route path="/admin/finance/reports" element={<F.FinancialReportsPage />} />
           <Route path="/admin/settings" element={<A.SchoolSettings />} /><Route path="/admin/users" element={rp(R.users)} /><Route path="/admin/audit" element={rp(R.audit)} />
+        </Route></Route>
+
+        <Route element={<RequireRole roles={['BURSAR', 'ADMIN']} />}><Route element={<Shell />}>
+          <Route path="/bursar" element={<B.BursarDashboard />} />
+          <Route path="/bursar/payments/new" element={<F.RecordPaymentPage />} />
+          <Route path="/bursar/accounts" element={<F.StudentAccountsPage />} />
+          <Route path="/bursar/receipts" element={<F.ReceiptsHistoryPage />} />
+          <Route path="/bursar/my-collections" element={<B.BursarMyCollections />} />
+          <Route path="/bursar/structures" element={<F.FeeStructuresPage />} />
+          <Route path="/bursar/expenses" element={<F.ExpensesPage />} />
+          <Route path="/bursar/reports" element={<F.FinancialReportsPage />} />
+          <Route path="/bursar/notifications" element={<S.NotificationsPage />} />
         </Route></Route>
 
         <Route element={<RequireRole roles={['TEACHER']} />}><Route element={<Shell />}>

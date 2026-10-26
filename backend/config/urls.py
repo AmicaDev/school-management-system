@@ -16,6 +16,7 @@ v1 = [
     path("analytics/", include("apps.analytics.urls")),
     path("audit/", include("apps.audit.urls")),
     path("developer/", include("apps.developer.urls")),
+    path("finance/", include("apps.finance.urls")),
 ]
 urlpatterns = [
     path("django-admin/", admin.site.urls),

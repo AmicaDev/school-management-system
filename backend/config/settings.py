@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "rest_framework", "rest_framework_simplejwt.token_blacklist", "corsheaders", "django_filters",
     "apps.users", "apps.academics", "apps.people", "apps.attendance", "apps.results",
     "apps.timetable", "apps.comms", "apps.audit", "apps.reports", "apps.analytics", "apps.developer",
+    "apps.finance",
 ]
 
 MIDDLEWARE = [
