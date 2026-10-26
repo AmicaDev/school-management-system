@@ -9,7 +9,7 @@ export const NAVS = {
   ADMIN: [
     ['Overview', '/admin', '▦', true], ['sec', 'People'],
     ['Students', '/admin/students', '🎓'], ['Parents', '/admin/parents', '👪'], ['Teachers', '/admin/teachers', '👩‍🏫'], ['Staff', '/admin/staff', '🧑‍💼'], ['Recycle bin', '/admin/recycle-bin', '♻'],
-    ['sec', 'Academics'], ['Classes & streams', '/admin/classes', '🏫'], ['Subjects', '/admin/subjects', '📘'], ['Years & terms', '/admin/academics', '📅'],
+    ['sec', 'Academics'], ['Classes & streams', '/admin/classes', '🏫'], ['Subjects', '/admin/subjects', '📘'], ['Teacher assignments', '/admin/assignments', '📋'], ['Years & terms', '/admin/academics', '📅'],
     ['Grading', '/admin/grading', '🅰'], ['Timetable', '/admin/timetable', '🕒'], ['Events', '/admin/events', '📣'],
     ['sec', 'Operations'], ['Attendance', '/admin/attendance', '✔'], ['Results', '/admin/results', '📝'], ['Reports', '/admin/reports', '🖨'],
     ['Analytics', '/admin/analytics', '📈'], ['Enquiries', '/admin/enquiries', '✉'], ['Notifications', '/admin/notifications', '🔔'],

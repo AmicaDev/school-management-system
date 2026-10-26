@@ -17,21 +17,52 @@ export function useMyStreams() {
   const { user } = useAuth()
   const a = useFetch('/academics/assignments/', { page_size: 200 })
   const s = useFetch('/academics/streams/')
+  const c = useFetch('/academics/classes/')
   const subFetch = useFetch('/academics/subjects/', { page_size: 200 })
   const assignments = items(a.data)
   const allSubjects = items(subFetch.data)
+  const allClasses = items(c.data)
+  const allStreams = items(s.data)
+
+  const activeAssignments = useMemo(() => {
+    return assignments.filter((x) => x.is_active !== false)
+  }, [assignments])
+
+  const assignedStreamIds = useMemo(() => {
+    if (user?.role === 'ADMIN') return new Set(allStreams.map((x) => x.id))
+    const ids = new Set(activeAssignments.map((x) => x.stream))
+    allStreams.filter((x) => x.class_teacher === user.id).forEach((x) => ids.add(x.id))
+    return ids
+  }, [activeAssignments, allStreams, user?.id, user?.role])
+
+  const assignedClassIds = useMemo(() => {
+    if (user?.role === 'ADMIN') return new Set(allClasses.map((cl) => cl.id))
+    const ids = new Set()
+    allStreams.forEach((st) => {
+      if (assignedStreamIds.has(st.id) && st.school_class) {
+        ids.add(st.school_class)
+      }
+    })
+    return ids
+  }, [allStreams, assignedStreamIds, allClasses, user?.role])
+
   const streams = useMemo(() => {
-    if (user?.role === 'ADMIN') return items(s.data)
-    const ids = new Set(assignments.map((x) => x.stream))
-    return items(s.data).filter((x) => ids.has(x.id) || x.class_teacher === user.id)
-  }, [a.data, s.data, user?.id, user?.role])
+    if (user?.role === 'ADMIN') return allStreams
+    return allStreams.filter((x) => assignedStreamIds.has(x.id))
+  }, [allStreams, assignedStreamIds, user?.role])
+
   return {
-    assignments,
+    assignments: activeAssignments,
+    allAssignments: assignments,
     streams,
+    allStreams,
+    allClasses,
+    assignedClassIds,
+    assignedStreamIds,
     allSubjects,
-    loading: a.loading || s.loading || subFetch.loading,
-    error: a.error || s.error || subFetch.error,
-    reload: () => { a.reload(); s.reload(); subFetch.reload() }
+    loading: a.loading || s.loading || c.loading || subFetch.loading,
+    error: a.error || s.error || c.error || subFetch.error,
+    reload: () => { a.reload(); s.reload(); c.reload(); subFetch.reload() }
   }
 }
 
@@ -64,8 +95,10 @@ function useSavedRoster() { // IndexedDB cache so rosters are available offline
 
 export function Attendance() {
   const my = useMyStreams()
+  const { user } = useAuth()
   const { online, refreshCount, sync } = useApp()
   const cache = useSavedRoster()
+  const [selectedClass, setSelectedClass] = useState('')
   const [stream, setStream] = useState('')
   const [subject, setSubject] = useState('')
   const [date, setDate] = useState(today())
@@ -73,8 +106,33 @@ export function Attendance() {
   const [load, setLoad] = useState({ loading: false, error: '' })
   const [save, setSave] = useState({ state: 'idle', msg: '' })
   const [fromCache, setFromCache] = useState(false)
-  const subjects = [...new Map(my.assignments.filter((a) => String(a.stream) === String(stream)).map((a) => [a.subject, a])).values()]
   const listRef = useRef()
+
+  const classes = useMemo(() => {
+    return [...my.allClasses].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name, undefined, { numeric: true }))
+  }, [my.allClasses])
+
+  const isClassAssigned = useMemo(() => {
+    if (!selectedClass) return false
+    if (user?.role === 'ADMIN') return true
+    return my.assignedClassIds.has(Number(selectedClass))
+  }, [selectedClass, my.assignedClassIds, user?.role])
+
+  const availableStreams = useMemo(() => {
+    if (!selectedClass || !isClassAssigned) return []
+    return my.streams.filter((s) => String(s.school_class) === String(selectedClass))
+  }, [my.streams, selectedClass, isClassAssigned])
+
+  // Auto-select stream if only 1 stream exists in the assigned class
+  useEffect(() => {
+    if (selectedClass && isClassAssigned && availableStreams.length === 1 && !stream) {
+      setStream(String(availableStreams[0].id))
+    }
+  }, [selectedClass, isClassAssigned, availableStreams, stream])
+
+  const subjects = useMemo(() => {
+    return [...new Map(my.assignments.filter((a) => String(a.stream) === String(stream)).map((a) => [a.subject, a])).values()]
+  }, [my.assignments, stream])
 
   const fetchRoster = useCallback(async () => {
     if (!stream) return setRows([])
@@ -121,13 +179,72 @@ export function Attendance() {
     <div className="stack">
       <section className="panel">
         <div className="panel-head"><h2>Take attendance</h2></div>
-        <div className="row">
-          <select className="input" style={{ width: 'auto' }} value={stream} onChange={(e) => { setStream(e.target.value); setSubject('') }} aria-label="Class and stream"><option value="">Class & stream</option>{my.streams.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
-          <input type="date" className="input" style={{ width: 'auto' }} value={date} max={today()} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
-          <select className="input" style={{ width: 'auto' }} value={subject} onChange={(e) => setSubject(e.target.value)} aria-label="Subject or session"><option value="">Whole day</option>{subjects.map((a) => <option key={a.id} value={a.subject}>{a.subject_name}</option>)}</select>
+        <div className="row wrap" style={{ gap: 10 }}>
+          <select
+            className="input"
+            style={{ width: 'auto' }}
+            value={selectedClass}
+            onChange={(e) => {
+              setSelectedClass(e.target.value)
+              setStream('')
+              setSubject('')
+            }}
+            aria-label="Select class"
+          >
+            <option value="">Select class</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}{user?.role !== 'ADMIN' && !my.assignedClassIds.has(c.id) ? ' 🔒 (Not assigned)' : ''}
+              </option>
+            ))}
+          </select>
+          <select
+            className="input"
+            style={{ width: 'auto' }}
+            value={stream}
+            onChange={(e) => { setStream(e.target.value); setSubject('') }}
+            aria-label="Stream"
+            disabled={!selectedClass || !isClassAssigned}
+          >
+            <option value="">Stream</option>
+            {availableStreams.map((s) => <option key={s.id} value={s.id}>{s.name || s.label}</option>)}
+          </select>
+          <input
+            type="date"
+            className="input"
+            style={{ width: 'auto' }}
+            value={date}
+            max={today()}
+            onChange={(e) => setDate(e.target.value)}
+            aria-label="Date"
+            disabled={!stream}
+          />
+          <select
+            className="input"
+            style={{ width: 'auto' }}
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            aria-label="Subject or session"
+            disabled={!stream}
+          >
+            <option value="">Whole day</option>
+            {subjects.map((a) => <option key={a.id} value={a.subject}>{a.subject_name}</option>)}
+          </select>
         </div>
       </section>
-      {!stream ? <Empty title="Choose a class to begin" /> : load.loading ? <Skeleton rows={6} /> : load.error ? <ErrorState message={load.error} onRetry={fetchRoster} /> : !rows.length ? <Empty title="No students in this class" /> : (
+      {!selectedClass ? (
+        <Empty title="Choose a class to begin">Select a class from Senior One through Senior Six to view attendance.</Empty>
+      ) : !isClassAssigned ? (
+        <Empty title="Class Not Assigned">You are not assigned to this class. Only classes assigned to you by the administrator are accessible for attendance.</Empty>
+      ) : !stream ? (
+        <Empty title="Choose a stream to begin">Select a stream within this class to load the attendance sheet.</Empty>
+      ) : load.loading ? (
+        <Skeleton rows={6} />
+      ) : load.error ? (
+        <ErrorState message={load.error} onRetry={fetchRoster} />
+      ) : !rows.length ? (
+        <Empty title="No students in this class" />
+      ) : (
         <section className="panel" style={{ padding: 0 }}>
           <div className="row spread" style={{ padding: 16, position: 'sticky', top: 60, background: 'var(--surface)', zIndex: 5, borderBottom: '1px solid var(--border)', borderRadius: '16px 16px 0 0' }}>
             <div className="counters">{STATES.map(([k, , l]) => <Badge key={k} value={k}>{l} {counts[k]}</Badge>)}<Badge>Unmarked {counts.NONE}</Badge></div>
@@ -195,15 +312,8 @@ export function Marks({ only }) {
   }, [terms, yearId])
 
   const classes = useMemo(() => {
-    const map = new Map()
-    my.streams.forEach((s) => {
-      const cid = s.school_class
-      if (cid && !map.has(cid)) {
-        map.set(cid, { id: cid, name: s.class_name || `Class ${cid}` })
-      }
-    })
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
-  }, [my.streams])
+    return [...my.allClasses].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name, undefined, { numeric: true }))
+  }, [my.allClasses])
 
   const [selectedClass, setSelectedClass] = useState('')
   const [stream, setStream] = useState('')
@@ -211,10 +321,16 @@ export function Marks({ only }) {
   const [paper, setPaper] = useState('')
   const [examTypeFilter, setExamTypeFilter] = useState(only ? only[0] : '')
 
+  const isClassAssigned = useMemo(() => {
+    if (!selectedClass) return false
+    if (user?.role === 'ADMIN') return true
+    return my.assignedClassIds.has(Number(selectedClass))
+  }, [selectedClass, my.assignedClassIds, user?.role])
+
   const availableStreams = useMemo(() => {
-    if (!selectedClass) return []
+    if (!selectedClass || !isClassAssigned) return []
     return my.streams.filter((s) => String(s.school_class) === String(selectedClass))
-  }, [my.streams, selectedClass])
+  }, [my.streams, selectedClass, isClassAssigned])
 
   // Pre-fill from navigation state if available
   useEffect(() => {
@@ -231,16 +347,17 @@ export function Marks({ only }) {
 
   // Auto-select stream if only 1 exists for the selected class
   useEffect(() => {
-    if (selectedClass && availableStreams.length === 1 && !stream) {
+    if (selectedClass && isClassAssigned && availableStreams.length === 1 && !stream) {
       setStream(String(availableStreams[0].id))
     }
-  }, [selectedClass, availableStreams, stream])
+  }, [selectedClass, isClassAssigned, availableStreams, stream])
 
   const subjects = useMemo(() => {
+    if (!isClassAssigned) return []
     const assigned = [...new Map(my.assignments.filter((a) => String(a.stream) === String(stream)).map((a) => [a.subject, a])).values()]
     if (assigned.length || user?.role !== 'ADMIN') return assigned
     return (my.allSubjects || []).map((sub) => ({ id: sub.id, subject: sub.id, subject_name: sub.name, paper_number: 1 }))
-  }, [my.assignments, my.allSubjects, stream, user?.role])
+  }, [my.assignments, my.allSubjects, stream, isClassAssigned, user?.role])
 
   const papers = useMemo(() => {
     const assigned = my.assignments.filter((a) => String(a.stream) === String(stream) && String(a.subject) === String(subject))
@@ -437,7 +554,11 @@ export function Marks({ only }) {
             aria-label="Select class"
           >
             <option value="">Select class</option>
-            {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}{user?.role !== 'ADMIN' && !my.assignedClassIds.has(c.id) ? ' 🔒 (Not assigned)' : ''}
+              </option>
+            ))}
           </select>
 
           {/* Stream */}
@@ -447,7 +568,7 @@ export function Marks({ only }) {
             value={stream}
             onChange={(e) => { setStream(e.target.value); setSubject(''); setPaper('') }}
             aria-label="Stream"
-            disabled={!selectedClass}
+            disabled={!selectedClass || !isClassAssigned}
           >
             <option value="">Stream</option>
             {availableStreams.map((s) => <option key={s.id} value={s.id}>{s.name || s.label}</option>)}
@@ -460,7 +581,7 @@ export function Marks({ only }) {
             value={subject}
             onChange={(e) => { setSubject(e.target.value); setPaper('') }}
             aria-label="Subject"
-            disabled={!stream}
+            disabled={!stream || !isClassAssigned}
           >
             <option value="">Subject</option>
             {subjects.map((a) => <option key={a.subject} value={a.subject}>{a.subject_name}</option>)}
@@ -473,7 +594,7 @@ export function Marks({ only }) {
             value={paper}
             onChange={(e) => setPaper(e.target.value)}
             aria-label="Papers"
-            disabled={!subject}
+            disabled={!subject || !isClassAssigned}
           >
             <option value="">Paper</option>
             {papers.map((n) => <option key={n} value={n}>Paper {n}</option>)}
@@ -494,8 +615,16 @@ export function Marks({ only }) {
         </div>
       </section>
 
-      {!stream || !subject || !paper ? (
-        <Empty title="Choose class, stream, subject and paper to view students" />
+      {!selectedClass ? (
+        <Empty title="Choose a class to begin">
+          Select a class from Senior One through Senior Six to enter marks.
+        </Empty>
+      ) : !isClassAssigned ? (
+        <Empty title="Class Not Assigned">
+          You are not assigned to this class. Only classes assigned to you by the administrator are accessible for entering marks and assessments.
+        </Empty>
+      ) : !stream || !subject || !paper ? (
+        <Empty title="Choose stream, subject and paper to view students" />
       ) : load.loading ? (
         <Skeleton rows={6} />
       ) : load.error ? (

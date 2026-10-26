@@ -128,11 +128,20 @@ class TeachingAssignment(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.PROTECT, related_name="assignments")
     paper_number = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1)])
     teacher_subject_code = models.CharField(max_length=30, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
 
     class Meta:
-        constraints = [models.UniqueConstraint(
-            fields=["stream", "subject", "paper_number"], name="uniq_assignment_paper"
-        )]
+        ordering = ["-is_active", "stream__school_class__order", "stream__name", "subject__name", "paper_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["teacher", "stream", "subject", "paper_number"],
+                condition=models.Q(is_active=True),
+                name="uniq_active_teacher_assignment"
+            )
+        ]
 
     def __str__(self):
         return f"{self.teacher} - {self.subject.code} - {self.stream}"

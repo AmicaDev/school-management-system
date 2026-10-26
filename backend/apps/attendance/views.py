@@ -122,8 +122,12 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": "stream and date are required."}, status=400)
         if not str(stream).isdigit() or (subject and not str(subject).isdigit()):
             return Response({"detail": "Invalid stream or subject."}, status=400)
-        if not teacher_can_teach(request.user, int(stream)):
-            return Response({"detail": "You are not assigned to this class."}, status=403)
+        if subject:
+            if not teacher_can_teach(request.user, int(stream), int(subject)):
+                return Response({"detail": "You are not assigned to this class and subject."}, status=403)
+        else:
+            if not teacher_can_teach(request.user, int(stream)):
+                return Response({"detail": "You are not assigned to this class."}, status=403)
         saved = dict(AttendanceRecord.objects.filter(stream_id=stream, date=date, subject_id=subject)
                      .values_list("student_id", "status"))
         roster = Student.objects.filter(stream_id=stream, is_archived=False).order_by("last_name", "first_name")

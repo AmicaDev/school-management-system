@@ -340,18 +340,22 @@ class AuthTests(Base):
         self.assertNotEqual(prof.signin_code_hash, issued_code)
         self.assertTrue(prof.signin_code_hash.startswith("pbkdf2_"))
 
-        # List payload does not leak code or hash
+        # Admin list and retrieve return signin_code for admin eye-toggle but never leak hash
         r_list = self.client.get("/api/v1/teachers/")
         self.assertEqual(r_list.status_code, 200)
         for item in r_list.data["results"]:
-            self.assertNotIn("signin_code", item)
+            self.assertIn("signin_code", item)
             self.assertNotIn("signin_code_hash", item)
 
-        # Retrieve payload does not leak code or hash
         r_get = self.client.get(f"/api/v1/teachers/{prof.id}/")
         self.assertEqual(r_get.status_code, 200)
-        self.assertNotIn("signin_code", r_get.data)
+        self.assertEqual(r_get.data.get("signin_code"), issued_code)
         self.assertNotIn("signin_code_hash", r_get.data)
+
+        # Unauthenticated users cannot view teachers list
+        self.client.force_authenticate(user=None)
+        r_anon = self.client.get("/api/v1/teachers/")
+        self.assertEqual(r_anon.status_code, 401)
 
     def test_teacher_login_lockout_after_failures(self):
         from django.core.cache import cache
@@ -821,3 +825,162 @@ class CommsTests(Base):
         remaining = self.client.get(f"/api/v1/enquiries/{enquiry_id}/").data["messages"]
         self.assertEqual(len(remaining), 1)
         self.assertEqual(remaining[0]["sender_name"], "t1")
+
+
+class TeacherAssignmentTests(Base):
+    def test_admin_can_assign_teacher_to_classes_and_subjects(self):
+        self.client.force_authenticate(user=self.admin)
+        s2_class = SchoolClass.objects.create(name="Senior 2", order=2)
+        s2_stream = Stream.objects.create(school_class=s2_class, name="Blue")
+        eng = Subject.objects.create(name="English", code="eng", number_of_papers=2)
+
+        r = self.client.post("/api/v1/academics/assignments/", {
+            "teacher": self.t2.id,
+            "stream": s2_stream.id,
+            "subject": eng.id,
+            "paper_number": 1,
+        }, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.data["teacher_name"], self.t2.full_name)
+        self.assertEqual(r.data["class_name"], "Senior 2")
+        self.assertEqual(r.data["stream_label"], "Senior 2 Blue")
+        self.assertEqual(r.data["subject_name"], "English")
+        self.assertEqual(r.data["created_by_name"], self.admin.full_name)
+        self.assertTrue(r.data["is_active"])
+
+    def test_supports_multiple_teachers_in_same_class_and_subject(self):
+        self.client.force_authenticate(user=self.admin)
+        # t1 is already assigned in setUp. Assign t2 to the same stream and subject paper.
+        r = self.client.post("/api/v1/academics/assignments/", {
+            "teacher": self.t2.id,
+            "stream": self.stream.id,
+            "subject": self.maths.id,
+            "paper_number": 1,
+        }, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(
+            TeachingAssignment.objects.filter(stream=self.stream, subject=self.maths, paper_number=1, is_active=True).count(),
+            2,
+        )
+
+    def test_prevents_accidental_duplicate_active_assignment(self):
+        self.client.force_authenticate(user=self.admin)
+        # t1 is already assigned to self.stream and self.maths paper 1
+        r = self.client.post("/api/v1/academics/assignments/", {
+            "teacher": self.t1.id,
+            "stream": self.stream.id,
+            "subject": self.maths.id,
+            "paper_number": 1,
+        }, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("already actively assigned", str(r.data))
+
+    def test_deactivate_and_reactivate_assignment(self):
+        self.client.force_authenticate(user=self.admin)
+        asgn = TeachingAssignment.objects.filter(teacher=self.t1, stream=self.stream, subject=self.maths).first()
+        self.assertIsNotNone(asgn)
+        self.assertTrue(asgn.is_active)
+
+        # Deactivate
+        r_deact = self.client.post(f"/api/v1/academics/assignments/{asgn.id}/deactivate/", format="json")
+        self.assertEqual(r_deact.status_code, 200)
+        asgn.refresh_from_db()
+        self.assertFalse(asgn.is_active)
+        self.assertFalse(r_deact.data["is_active"])
+
+        # Reactivate
+        r_act = self.client.post(f"/api/v1/academics/assignments/{asgn.id}/activate/", format="json")
+        self.assertEqual(r_act.status_code, 200)
+        asgn.refresh_from_db()
+        self.assertTrue(asgn.is_active)
+        self.assertTrue(r_act.data["is_active"])
+
+    def test_deactivated_teacher_cannot_submit_marks_or_attendance(self):
+        # Remove class_teacher from stream so permission relies solely on assignment
+        self.stream.class_teacher = None
+        self.stream.save()
+
+        asgn = TeachingAssignment.objects.filter(teacher=self.t1, stream=self.stream, subject=self.maths).first()
+        asgn.is_active = False
+        asgn.save()
+
+        # Teacher t1 tries to access attendance sheet
+        self.client.force_authenticate(user=self.t1)
+        r_att_sheet = self.client.get(
+            f"/api/v1/attendance/sheet/?stream={self.stream.id}&date=2026-03-01&subject={self.maths.id}"
+        )
+        self.assertEqual(r_att_sheet.status_code, 403)
+
+        # Teacher t1 tries to submit bulk attendance
+        r_att_bulk = self.client.post("/api/v1/attendance/bulk/", {
+            "client_txn_id": "test-txn-att",
+            "stream": self.stream.id,
+            "date": "2026-03-01",
+            "subject": self.maths.id,
+            "records": [{"student": self.s1.id, "status": "PRESENT"}],
+        }, format="json")
+        self.assertEqual(r_att_bulk.status_code, 403)
+
+        # Teacher t1 tries to access marks grid
+        r_grid = self.client.get(
+            f"/api/v1/results/grid/?stream={self.stream.id}&subject={self.maths.id}&paper_number=1&term={self.term.id}"
+        )
+        self.assertEqual(r_grid.status_code, 403)
+
+        # Teacher t1 tries to submit marks bulk
+        r_marks_bulk = self.client.post("/api/v1/results/assessments/bulk/", {
+            "client_txn_id": "test-txn-marks",
+            "stream": self.stream.id,
+            "subject": self.maths.id,
+            "paper_number": 1,
+            "term": self.term.id,
+            "exam_type": self.et.id,
+            "max_score": 100,
+            "entries": [{"student": self.s1.id, "score": 85}],
+        }, format="json")
+        self.assertEqual(r_marks_bulk.status_code, 403)
+
+        # Re-activate assignment and verify operations succeed
+        asgn.is_active = True
+        asgn.save()
+        r_grid_ok = self.client.get(
+            f"/api/v1/results/grid/?stream={self.stream.id}&subject={self.maths.id}&paper_number=1&term={self.term.id}"
+        )
+        self.assertEqual(r_grid_ok.status_code, 200)
+
+    def test_non_admin_cannot_manage_assignments(self):
+        self.client.force_authenticate(user=self.t1)
+        r_post = self.client.post("/api/v1/academics/assignments/", {
+            "teacher": self.t2.id,
+            "stream": self.stream.id,
+            "subject": self.maths.id,
+            "paper_number": 1,
+        }, format="json")
+        self.assertEqual(r_post.status_code, 403)
+
+        asgn = TeachingAssignment.objects.first()
+        r_deact = self.client.post(f"/api/v1/academics/assignments/{asgn.id}/deactivate/", format="json")
+        self.assertEqual(r_deact.status_code, 403)
+
+    def test_senior_one_through_six_configurable_classes_supported(self):
+        self.client.force_authenticate(user=self.admin)
+        classes = []
+        for i in range(1, 7):
+            cls = SchoolClass.objects.create(name=f"Senior {i}", order=i)
+            stream = Stream.objects.create(school_class=cls, name="East")
+            classes.append((cls, stream))
+
+        bio = Subject.objects.create(name="Biology", code="bio")
+        for cls, stream in classes:
+            r = self.client.post("/api/v1/academics/assignments/", {
+                "teacher": self.t1.id,
+                "stream": stream.id,
+                "subject": bio.id,
+                "paper_number": 1,
+            }, format="json")
+            self.assertEqual(r.status_code, 201)
+
+        self.assertEqual(
+            TeachingAssignment.objects.filter(teacher=self.t1, subject=bio, is_active=True).count(),
+            6,
+        )

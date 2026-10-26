@@ -93,7 +93,7 @@ export default function App() {
           <Route path="/admin/students" element={<StudentsPage />} /><Route path="/admin/students/:id" element={<S.StudentProfile />} />
           <Route path="/admin/teachers" element={<TeachersPage />} /><Route path="/admin/parents" element={<ParentsPage />} /><Route path="/admin/staff" element={rp(R.staff)} />
           <Route path="/admin/recycle-bin" element={<A.RecycleBinPage />} />
-          <Route path="/admin/classes" element={<A.ClassesPage />} /><Route path="/admin/subjects" element={<A.SubjectsPage />} /><Route path="/admin/academics" element={<A.AcademicsPage />} /><Route path="/admin/grading" element={<A.GradingPage />} />
+          <Route path="/admin/classes" element={<A.ClassesPage />} /><Route path="/admin/subjects" element={<A.SubjectsPage />} /><Route path="/admin/assignments" element={<A.TeacherAssignmentsPage />} /><Route path="/admin/academics" element={<A.AcademicsPage />} /><Route path="/admin/grading" element={<A.GradingPage />} />
           <Route path="/admin/attendance" element={rp(R.attendance)} /><Route path="/admin/results" element={<S.ClassResults downloads={false} />} /><Route path="/admin/reports" element={<A.AdminStudentReportsPage />} /><Route path="/admin/student-reports" element={<A.AdminStudentReportsPage />} />
           <Route path="/admin/timetable" element={rp(R.timetable)} /><Route path="/admin/events" element={rp(R.events)} /><Route path="/admin/notifications" element={<S.NotificationsPage />} />
           <Route path="/admin/enquiries" element={<S.Enquiries />} /><Route path="/admin/analytics" element={<A.AdminDashboard view="analytics" />} />

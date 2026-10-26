@@ -72,14 +72,55 @@ class SubjectViewSet(ConfigViewSet):
 
 
 class TeachingAssignmentViewSet(ConfigViewSet):
-    queryset = m.TeachingAssignment.objects.select_related("teacher", "stream__school_class", "subject")
+    queryset = m.TeachingAssignment.objects.select_related("teacher", "stream__school_class", "subject", "created_by")
     serializer_class = s.TeachingAssignmentSerializer
-    filterset_fields = ["teacher", "stream", "subject"]
+    filterset_fields = ["teacher", "stream", "stream__school_class", "subject", "is_active"]
+    search_fields = [
+        "teacher__first_name", "teacher__last_name", "teacher__username",
+        "subject__name", "subject__code", "stream__name", "stream__school_class__name"
+    ]
+
+    def perform_create(self, serializer):
+        user = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(created_by=user)
 
     def get_queryset(self):
         qs = super().get_queryset()
         u = self.request.user
-        return qs.filter(teacher=u) if u.role == "TEACHER" else qs if u.role == "ADMIN" else qs.none()
+        if u.role == "TEACHER":
+            return qs.filter(teacher=u, is_active=True)
+        if u.role == "ADMIN":
+            return qs
+        return qs.none()
+
+    @action(detail=True, methods=["post"])
+    def deactivate(self, request, pk=None):
+        assignment = self.get_object()
+        assignment.is_active = False
+        assignment.save(update_fields=["is_active", "updated_at"])
+        audit(request, "DEACTIVATE", "academic_assignment", f"Ended assignment: {assignment}")
+        return Response(self.get_serializer(assignment).data)
+
+    @action(detail=True, methods=["post"])
+    def activate(self, request, pk=None):
+        assignment = self.get_object()
+        # Verify no duplicate active assignment exists for this teacher
+        dupes = m.TeachingAssignment.objects.filter(
+            teacher=assignment.teacher,
+            stream=assignment.stream,
+            subject=assignment.subject,
+            paper_number=assignment.paper_number,
+            is_active=True,
+        ).exclude(pk=assignment.pk)
+        if dupes.exists():
+            return Response(
+                {"detail": "This teacher is already actively assigned to this class and subject paper."},
+                status=400,
+            )
+        assignment.is_active = True
+        assignment.save(update_fields=["is_active", "updated_at"])
+        audit(request, "ACTIVATE", "academic_assignment", f"Reactivated assignment: {assignment}")
+        return Response(self.get_serializer(assignment).data)
 
 
 class ExamTypeViewSet(ConfigViewSet):

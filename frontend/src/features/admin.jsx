@@ -141,4 +141,416 @@ export function ImportPanel({ kind, title, columns, note }) {
   )
 }
 
+export function TeacherAssignmentsPage() {
+  const [tab, setTab] = useState('By Teacher')
+  const [search, setSearch] = useState('')
+  const [selectedClass, setSelectedClass] = useState('')
+  const [modalTeacher, setModalTeacher] = useState(null)
+  const [form, setForm] = useState(null)
+  const [notice, setNotice] = useState('')
+
+  const teachers = useFetch('/teachers/', { page_size: 200 })
+  const classes = useFetch('/academics/classes/')
+  const streams = useFetch('/academics/streams/')
+  const subjects = useFetch('/academics/subjects/', { is_archived: false })
+  const assignments = useFetch('/academics/assignments/', { page_size: 500 })
+
+  const teacherList = items(teachers.data)
+  const classList = items(classes.data)
+  const streamList = items(streams.data)
+  const subjectList = items(subjects.data)
+  const assignmentList = items(assignments.data)
+
+  const reloadAll = () => {
+    assignments.reload()
+    teachers.reload()
+  }
+
+  const toggleStatus = async (item) => {
+    try {
+      const action = item.is_active ? 'deactivate' : 'activate'
+      await api.post(`/academics/assignments/${item.id}/${action}/`)
+      setNotice(`Assignment ${item.is_active ? 'deactivated' : 'reactivated'} successfully.`)
+      reloadAll()
+    } catch (e) {
+      setNotice(errorMessage(e))
+    }
+  }
+
+  const filteredTeachers = teacherList.filter((t) => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return (t.full_name || '').toLowerCase().includes(q) || (t.username || '').toLowerCase().includes(q)
+  })
+
+  const saveAssignment = async (e) => {
+    e.preventDefault()
+    if (!form.teacher || !form.stream || !form.subject) {
+      setNotice('Teacher, class & stream, and subject are required.')
+      return
+    }
+    try {
+      if (form.id) {
+        await api.patch(`/academics/assignments/${form.id}/`, form)
+        setNotice('Assignment updated.')
+      } else {
+        await api.post('/academics/assignments/', form)
+        setNotice('Teacher assigned successfully.')
+      }
+      setForm(null)
+      setModalTeacher(null)
+      reloadAll()
+    } catch (err) {
+      setNotice(errorMessage(err))
+    }
+  }
+
+  return (
+    <div className="stack">
+      <div className="panel-head">
+        <h2>Teacher Class & Subject Assignments</h2>
+        <button
+          className="btn primary"
+          onClick={() => setForm({ paper_number: 1, is_active: true })}
+        >
+          + Assign Teacher to Class
+        </button>
+      </div>
+
+      <p className="muted">
+        Assign teachers to Senior 1 through Senior 6 classes and subjects. Supports multiple teachers per class and multiple classes per teacher. Deactivating or ending an assignment safely revokes access without deleting past academic or attendance records.
+      </p>
+
+      {notice && <Alert kind={notice.includes('successfully') || notice.includes('updated') ? 'success' : 'error'}>{notice}</Alert>}
+
+      <Tabs tabs={['By Teacher', 'By Class', 'All Assignments']} value={tab} onChange={setTab} />
+
+      {tab === 'By Teacher' && (
+        <section className="panel">
+          <div className="row spread" style={{ marginBottom: 16 }}>
+            <input
+              className="input"
+              style={{ maxWidth: 300 }}
+              placeholder="Search teachers by name or username…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <span className="muted" style={{ fontSize: 13 }}>
+              {filteredTeachers.length} teacher(s) registered
+            </span>
+          </div>
+
+          {teachers.loading ? (
+            <Skeleton rows={6} />
+          ) : !filteredTeachers.length ? (
+            <Empty title="No teachers found" />
+          ) : (
+            <div className="stack">
+              {filteredTeachers.map((t) => {
+                const myAssigns = assignmentList.filter((a) => a.teacher === t.user_id)
+                const activeCount = myAssigns.filter((a) => a.is_active).length
+                return (
+                  <div
+                    key={t.id}
+                    className="panel"
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 16,
+                      background: 'var(--surface-card, var(--surface))'
+                    }}
+                  >
+                    <div className="row spread" style={{ alignItems: 'flex-start' }}>
+                      <div>
+                        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                          <b style={{ fontSize: 16 }}>{t.full_name}</b>
+                          <code className="muted">@{t.username}</code>
+                          <span className={`badge ${activeCount ? 'success' : 'muted'}`}>
+                            {activeCount} Active Assignment{activeCount === 1 ? '' : 's'}
+                          </span>
+                          {t.phone && <span className="muted" style={{ fontSize: 12 }}>📞 {t.phone}</span>}
+                        </div>
+                      </div>
+                      <button
+                        className="btn sm"
+                        onClick={() => setForm({ teacher: t.user_id, paper_number: 1, is_active: true })}
+                      >
+                        + Assign to Class / Subject
+                      </button>
+                    </div>
+
+                    {!myAssigns.length ? (
+                      <p className="muted" style={{ fontSize: 13, marginTop: 10, fontStyle: 'italic' }}>
+                        No classes or subjects assigned yet. Click "+ Assign to Class / Subject" to assign this teacher.
+                      </p>
+                    ) : (
+                      <div className="table-wrap" style={{ marginTop: 12 }}>
+                        <table className="table">
+                          <thead>
+                            <tr>
+                              <th>Class & Stream</th>
+                              <th>Subject</th>
+                              <th>Paper</th>
+                              <th>Subject Code</th>
+                              <th>Status</th>
+                              <th>Assigned On</th>
+                              <th style={{ textAlign: 'right' }}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {myAssigns.map((a) => (
+                              <tr key={a.id} style={{ opacity: a.is_active ? 1 : 0.65 }}>
+                                <td><b>{a.stream_label || '—'}</b></td>
+                                <td>{a.subject_name || '—'}</td>
+                                <td>Paper {a.paper_number || 1}</td>
+                                <td>{a.teacher_subject_code || '—'}</td>
+                                <td>
+                                  <span className={`badge ${a.is_active ? 'success' : 'danger'}`}>
+                                    {a.is_active ? 'Active' : 'Ended'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <small className="muted">{a.created_at ? fmtDate(a.created_at) : '—'}</small>
+                                </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
+                                    <button
+                                      className="btn sm"
+                                      onClick={() => setForm(a)}
+                                      title="Edit assignment details"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      className={`btn sm ${a.is_active ? 'danger' : 'success'}`}
+                                      onClick={() => toggleStatus(a)}
+                                      title={a.is_active ? 'End this assignment' : 'Reactivate this assignment'}
+                                    >
+                                      {a.is_active ? 'End assignment' : 'Reactivate'}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {tab === 'By Class' && (
+        <section className="panel">
+          <div className="row" style={{ marginBottom: 16 }}>
+            <label>
+              <b>Select Class:</b>
+              <select
+                className="input"
+                style={{ width: 'auto', marginLeft: 8 }}
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+              >
+                <option value="">All Classes (Senior 1 – Senior 6)</option>
+                {classList.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="stack">
+            {streamList
+              .filter((s) => !selectedClass || String(s.school_class) === String(selectedClass))
+              .map((st) => {
+                const streamAssigns = assignmentList.filter((a) => a.stream === st.id)
+                return (
+                  <div
+                    key={st.id}
+                    className="panel"
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: 16,
+                    }}
+                  >
+                    <div className="row spread">
+                      <div>
+                        <h3 style={{ margin: 0 }}>{st.label || st.name}</h3>
+                        {st.class_teacher_name && (
+                          <span className="muted" style={{ fontSize: 13 }}>
+                            Class teacher: <b>{st.class_teacher_name}</b>
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        className="btn sm"
+                        onClick={() => setForm({ stream: st.id, paper_number: 1, is_active: true })}
+                      >
+                        + Assign Teacher to {st.name}
+                      </button>
+                    </div>
+
+                    {!streamAssigns.length ? (
+                      <p className="muted" style={{ fontSize: 13, marginTop: 10, fontStyle: 'italic' }}>
+                        No teachers assigned to this class yet.
+                      </p>
+                    ) : (
+                      <div className="table-wrap" style={{ marginTop: 12 }}>
+                        <table className="table">
+                          <thead>
+                            <tr>
+                              <th>Teacher</th>
+                              <th>Subject</th>
+                              <th>Paper</th>
+                              <th>Subject Code</th>
+                              <th>Status</th>
+                              <th>Assigned On</th>
+                              <th style={{ textAlign: 'right' }}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {streamAssigns.map((a) => (
+                              <tr key={a.id} style={{ opacity: a.is_active ? 1 : 0.65 }}>
+                                <td><b>{a.teacher_name || '—'}</b></td>
+                                <td>{a.subject_name || '—'}</td>
+                                <td>Paper {a.paper_number || 1}</td>
+                                <td>{a.teacher_subject_code || '—'}</td>
+                                <td>
+                                  <span className={`badge ${a.is_active ? 'success' : 'danger'}`}>
+                                    {a.is_active ? 'Active' : 'Ended'}
+                                  </span>
+                                </td>
+                                <td><small className="muted">{a.created_at ? fmtDate(a.created_at) : '—'}</small></td>
+                                <td style={{ textAlign: 'right' }}>
+                                  <div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
+                                    <button
+                                      className={`btn sm ${a.is_active ? 'danger' : 'success'}`}
+                                      onClick={() => toggleStatus(a)}
+                                    >
+                                      {a.is_active ? 'End' : 'Reactivate'}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+          </div>
+        </section>
+      )}
+
+      {tab === 'All Assignments' && (
+        <ResourcePage cfg={R.assignments} embedded key="all-assignments-tab" />
+      )}
+
+      {form && (
+        <Modal
+          title={form.id ? 'Edit Teaching Assignment' : 'Assign Teacher to Class & Subject'}
+          onClose={() => setForm(null)}
+        >
+          <form onSubmit={saveAssignment}>
+            <div className="stack" style={{ gap: 12 }}>
+              <label>
+                Teacher:
+                <select
+                  className="input"
+                  value={form.teacher || ''}
+                  onChange={(e) => setForm({ ...form, teacher: Number(e.target.value) })}
+                  required
+                >
+                  <option value="">Select teacher</option>
+                  {teacherList.map((t) => (
+                    <option key={t.id} value={t.user_id}>{t.full_name} (@{t.username})</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Class & Stream:
+                <select
+                  className="input"
+                  value={form.stream || ''}
+                  onChange={(e) => setForm({ ...form, stream: Number(e.target.value) })}
+                  required
+                >
+                  <option value="">Select class & stream</option>
+                  {streamList.map((s) => (
+                    <option key={s.id} value={s.id}>{s.label || s.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Subject:
+                <select
+                  className="input"
+                  value={form.subject || ''}
+                  onChange={(e) => setForm({ ...form, subject: Number(e.target.value) })}
+                  required
+                >
+                  <option value="">Select subject</option>
+                  {subjectList.map((sub) => (
+                    <option key={sub.id} value={sub.id}>{sub.code} - {sub.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Paper Number:
+                <input
+                  type="number"
+                  min="1"
+                  className="input"
+                  value={form.paper_number || 1}
+                  onChange={(e) => setForm({ ...form, paper_number: Number(e.target.value) })}
+                  required
+                />
+              </label>
+
+              <label>
+                Assigned Subject Code (Optional):
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="e.g. HIS221-S1"
+                  value={form.teacher_subject_code || ''}
+                  onChange={(e) => setForm({ ...form, teacher_subject_code: e.target.value })}
+                />
+              </label>
+
+              <label className="row" style={{ gap: 8, alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={form.is_active ?? true}
+                  onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+                />
+                <span>Active assignment (uncheck to end this assignment)</span>
+              </label>
+
+              <div className="row spread" style={{ marginTop: 12 }}>
+                <button type="button" className="btn" onClick={() => setForm(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn primary">
+                  {form.id ? 'Save changes' : 'Assign teacher'}
+                </button>
+              </div>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
 export { AdminStudentReportsPage } from './StudentReports'

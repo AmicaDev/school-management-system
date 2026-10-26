@@ -75,30 +75,45 @@ class SubjectSerializer(serializers.ModelSerializer):
 class TeachingAssignmentSerializer(serializers.ModelSerializer):
     teacher_name = serializers.CharField(source="teacher.full_name", read_only=True)
     stream_label = serializers.CharField(source="stream.__str__", read_only=True)
+    class_name = serializers.CharField(source="stream.school_class.name", read_only=True)
+    class_id = serializers.IntegerField(source="stream.school_class_id", read_only=True)
     subject_name = serializers.CharField(source="subject.name", read_only=True)
+    subject_code = serializers.CharField(source="subject.code", read_only=True)
+    created_by_name = serializers.CharField(source="created_by.full_name", read_only=True, default=None)
 
     class Meta:
         model = m.TeachingAssignment
-        fields = "__all__"
+        fields = [
+            "id", "teacher", "teacher_name", "stream", "stream_label", "class_name", "class_id",
+            "subject", "subject_name", "subject_code", "paper_number", "teacher_subject_code",
+            "is_active", "created_at", "updated_at", "created_by", "created_by_name"
+        ]
+        read_only_fields = ["created_at", "updated_at", "created_by"]
+        validators = []
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        teacher = attrs.get("teacher", getattr(self.instance, "teacher", None))
         stream = attrs.get("stream", getattr(self.instance, "stream", None))
         subject = attrs.get("subject", getattr(self.instance, "subject", None))
         paper_number = attrs.get("paper_number", getattr(self.instance, "paper_number", 1))
+        is_active = attrs.get("is_active", getattr(self.instance, "is_active", True))
+
         if subject and paper_number > subject.number_of_papers:
             raise serializers.ValidationError({
-                "paper_number": f"This subject has {subject.number_of_papers} paper(s)."
+                "paper_number": f"This subject has only {subject.number_of_papers} paper(s)."
             })
-        if stream and subject:
-            assignments = m.TeachingAssignment.objects.filter(
-                stream=stream, subject=subject, paper_number=paper_number
+
+        # Prevent accidental duplicate active assignments for the same teacher
+        if is_active and teacher and stream and subject:
+            dupes = m.TeachingAssignment.objects.filter(
+                teacher=teacher, stream=stream, subject=subject, paper_number=paper_number, is_active=True
             )
             if self.instance:
-                assignments = assignments.exclude(pk=self.instance.pk)
-            if assignments.exists():
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
                 raise serializers.ValidationError({
-                    "paper_number": "A teacher is already assigned to this paper and class."
+                    "teacher": "This teacher is already actively assigned to this class and subject paper."
                 })
         return attrs
 
