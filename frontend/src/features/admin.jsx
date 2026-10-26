@@ -114,29 +114,164 @@ export function ImportPanel({ kind, title, columns, note }) {
   const [res, setRes] = useState(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(null)
+  const [progressMsg, setProgressMsg] = useState('')
+
   const run = async (dry) => {
-    const body = new FormData(); body.append('file', file); body.append('dry_run', dry)
-    setBusy(true); setErr('')
-    try { setRes((await api.post(`/${kind}/import/`, body)).data) } catch (e) { setErr(errorMessage(e)) }
-    setBusy(false)
+    const body = new FormData()
+    body.append('file', file)
+    body.append('dry_run', dry)
+    setBusy(true)
+    setErr('')
+    setProgress(0)
+    setProgressMsg(dry ? 'Uploading file for validation…' : 'Uploading file for import…')
+
+    try {
+      const { data } = await api.post(`/${kind}/import/`, body, {
+        onUploadProgress: (evt) => {
+          if (evt.total) {
+            const pct = Math.round((evt.loaded * 100) / evt.total)
+            setProgress(pct)
+            if (pct >= 100) {
+              setProgressMsg(dry ? 'Processing and validating records on the server…' : 'Saving validated records into database…')
+            } else {
+              setProgressMsg(`Uploading: ${pct}%`)
+            }
+          }
+        }
+      })
+      setRes(data)
+    } catch (e) {
+      setErr(errorMessage(e))
+    } finally {
+      setBusy(false)
+      setProgress(null)
+      setProgressMsg('')
+    }
   }
+
   const template = () => {
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([`${columns.join(',')}\n`], { type: 'text/csv' }))
-    a.download = `${kind}-import-template.csv`; a.click()
+    a.download = `${kind}-import-template.csv`
+    a.click()
   }
+
+  const downloadErrorReport = () => {
+    if (!res?.invalid?.length) return
+    const csvContent = 'Row,Error\n' + res.invalid.map((i) => `${i.row},"${(i.error || '').replace(/"/g, '""')}"`).join('\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv' }))
+    a.download = `${kind}-import-errors.csv`
+    a.click()
+  }
+
+  const totalProcessed = res ? (res.valid + (res.invalid?.length || 0) + (res.duplicates?.length || 0)) : 0
+
   return (
-    <section className="panel"><div className="panel-head"><h2>{title}</h2><button className="btn sm" onClick={template}>Download CSV template</button></div>
-      <p className="muted">Columns: {columns.join(', ')}. CSV or Excel (.xlsx), up to 2 MB. {note} Records are validated first; nothing is saved until you import.</p>
-      <Alert>{err}</Alert>
-      <div className="row"><input type="file" accept=".csv,.xlsx" className="input" style={{ maxWidth: 320 }} onChange={(e) => { setFile(e.target.files[0]); setRes(null) }} aria-label={`${title} file`} />
-        <button className="btn" disabled={!file || busy} onClick={() => run(true)}>Validate</button>
-        <button className="btn primary" disabled={!file || busy || !res || !res.dry_run || res.valid === 0} onClick={() => run(false)}>Import {res?.valid || ''} valid record(s)</button></div>
-      {res && <div className="stack" style={{ marginTop: 12 }}>
-        <div className="row"><span className="badge PASS">Valid {res.valid}</span><span className="badge FAIL">Invalid {res.invalid.length}</span><span className="badge WARNING">Duplicates {res.duplicates.length}</span>{!res.dry_run && <span className="badge info">Imported {res.created}</span>}</div>
-        {res.invalid.map((i) => <div key={i.row} className="alert error">Row {i.row}: {i.error}</div>)}{res.duplicates.map((d) => <div key={d.row} className="alert warning">Row {d.row}: {d.name} already exists</div>)}
-        {res.credentials?.length > 0 && <div className="alert warning"><b>Temporary credentials — shown once. Copy them now and hand them out securely.</b>
-          <div className="pre">{res.credentials.map((c) => c.signin_code ? `${c.username}   Password: ${c.temporary_password}   Teacher code: ${c.signin_code}   (${c.full_name || ''}${c.subject ? ` · ${c.subject}` : ''})` : `${c.username}   ${c.temporary_password}`).join('\n')}</div></div>}</div>}
+    <section className="panel">
+      <div className="panel-head">
+        <h2>{title}</h2>
+        <button className="btn sm" onClick={template}>Download CSV template</button>
+      </div>
+      <p className="muted">
+        Columns: {columns.join(', ')}. CSV or Excel (.xlsx), up to 2 MB. {note} Records are validated first; nothing is saved until you import.
+      </p>
+
+      {err && <Alert kind="error">{err}</Alert>}
+
+      <div className="row wrap" style={{ gap: 10, alignItems: 'center' }}>
+        <input
+          type="file"
+          accept=".csv,.xlsx"
+          className="input"
+          style={{ maxWidth: 320 }}
+          onChange={(e) => { setFile(e.target.files[0] || null); setRes(null); setErr('') }}
+          aria-label={`${title} file`}
+          disabled={busy}
+        />
+        <button className="btn" disabled={!file || busy} onClick={() => run(true)}>
+          {busy && progressMsg.includes('validation') ? 'Validating…' : 'Validate File'}
+        </button>
+        <button
+          className="btn primary"
+          disabled={!file || busy || !res || !res.dry_run || res.valid === 0}
+          onClick={() => run(false)}
+        >
+          {busy && progressMsg.includes('import') ? 'Importing…' : `Import ${res?.valid || ''} valid record(s)`}
+        </button>
+      </div>
+
+      {busy && (
+        <div style={{ marginTop: 12 }}>
+          <div className="row spread" style={{ fontSize: 13, marginBottom: 4 }}>
+            <span>{progressMsg}</span>
+            {progress !== null && <span>{progress}%</span>}
+          </div>
+          <div style={{ width: '100%', height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+            <div
+              style={{
+                width: `${progress ?? 100}%`,
+                height: '100%',
+                background: 'var(--primary)',
+                transition: 'width 0.2s ease',
+                animation: progress === null || progress >= 100 ? 'pulse 1.5s infinite' : 'none'
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {res && (
+        <div className="stack" style={{ marginTop: 14 }}>
+          {!res.dry_run && res.created > 0 && (
+            <Alert kind="success">
+              ✅ Successfully imported {res.created} {title.toLowerCase()} into the system.
+            </Alert>
+          )}
+
+          <div className="row spread" style={{ alignItems: 'center', background: 'var(--surface-raised, #f8f9fa)', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div className="row" style={{ gap: 8 }}>
+              <span className="badge">Total processed: {totalProcessed}</span>
+              <span className="badge PASS">Valid: {res.valid}</span>
+              <span className="badge FAIL">Invalid: {res.invalid.length}</span>
+              <span className="badge WARNING">Duplicates: {res.duplicates.length}</span>
+              {!res.dry_run && <span className="badge info">Imported: {res.created}</span>}
+            </div>
+
+            {res.invalid.length > 0 && (
+              <button className="btn sm danger" type="button" onClick={downloadErrorReport}>
+                📥 Download Error Report (CSV)
+              </button>
+            )}
+          </div>
+
+          {res.invalid.map((i) => (
+            <div key={i.row} className="alert error" style={{ fontSize: 13 }}>
+              <b>Row {i.row}:</b> {i.error}
+            </div>
+          ))}
+
+          {res.duplicates.map((d) => (
+            <div key={d.row} className="alert warning" style={{ fontSize: 13 }}>
+              <b>Row {d.row}:</b> {d.name} already exists
+            </div>
+          ))}
+
+          {res.credentials?.length > 0 && (
+            <div className="alert warning">
+              <b>Temporary credentials — shown once. Copy them now and hand them out securely.</b>
+              <div className="pre" style={{ maxHeight: 200, overflowY: 'auto', marginTop: 8 }}>
+                {res.credentials.map((c) =>
+                  c.signin_code
+                    ? `${c.username}   Password: ${c.temporary_password}   Teacher code: ${c.signin_code}   (${c.full_name || ''}${c.subject ? ` · ${c.subject}` : ''})`
+                    : `${c.username}   ${c.temporary_password}`
+                ).join('\n')}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   )
 }

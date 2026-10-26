@@ -595,13 +595,23 @@ export default function ResourcePage({ cfg, embedded }) {
           record={form.id ? form : null}
           onClose={() => setForm(null)}
           onSaved={(savedData) => {
+            const isEditing = Boolean(form.id)
             setForm(null)
-            if (savedData?.signin_code) {
-              setNoticeKind('info')
-              setNotice(`Saved! Teacher sign-in code: ${savedData.signin_code} — please copy or share this with the teacher now (it will not be shown again).`)
+            const nameLabel = savedData?.full_name || savedData?.name || ''
+            if (cfg.singular === 'student') {
+              const streamInfo = savedData?.stream_label ? ` (${savedData.stream_label})` : ''
+              setNoticeKind('success')
+              setNotice(`Student ${nameLabel}${streamInfo} ${isEditing ? 'updated' : 'registered'} successfully.`)
+            } else if (cfg.singular === 'teacher') {
+              setNoticeKind('success')
+              if (savedData?.signin_code) {
+                setNotice(`Teacher ${nameLabel} ${isEditing ? 'updated' : 'registered'} successfully. Teacher sign-in code: ${savedData.signin_code} — please share this code with the teacher.`)
+              } else {
+                setNotice(`Teacher ${nameLabel} ${isEditing ? 'updated' : 'registered'} successfully.`)
+              }
             } else {
               setNoticeKind('success')
-              setNotice('Saved.')
+              setNotice(`${cfg.singular ? cfg.singular.charAt(0).toUpperCase() + cfg.singular.slice(1) : 'Record'} ${isEditing ? 'updated' : 'saved'} successfully.`)
             }
             load()
           }}

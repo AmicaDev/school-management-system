@@ -312,10 +312,12 @@ def _create(kind, valid):
             if v.get("subject") and v.get("stream"):
                 from apps.academics.models import TeachingAssignment
                 TeachingAssignment.objects.get_or_create(
+                    teacher=user,
                     stream=v["stream"],
                     subject=v["subject"],
                     paper_number=1,
-                    defaults={"teacher": user}
+                    is_active=True,
+                    defaults={"created_by": None}
                 )
 
             out.append({
