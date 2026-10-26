@@ -9,6 +9,7 @@ import { enqueue } from '../offline/queue'
 import { Alert, Badge, Empty, ErrorState, Skeleton, Table, Tabs, fmtDate, fmtDateTime } from '../components/ui'
 import ResourcePage from './ResourcePage'
 import { R } from './resources'
+import { getNotificationPermission, isNotificationSupported, requestNotificationPermission } from '../services/notifications'
 
 export const Chart = ({ children, height = 260 }) => <div className="chart-box" style={{ height }}><ResponsiveContainer>{children}</ResponsiveContainer></div>
 const AXIS = { stroke: 'var(--muted)', fontSize: 12 }
@@ -218,9 +219,12 @@ export function ClassResults({ downloads = true }) {
         const avg = avgRaw != null ? Number(avgRaw.toFixed(1)) : null
         const idInfo = getIdentifierInfo(avg != null ? avg : c1)
 
-        const final100 = sub.total != null
-          ? Number(sub.total)
-          : (col20 != null && eotVal != null ? (col20 + eotVal) : (eotVal != null ? eotVal : (col20 != null ? col20 : null)))
+        // 100% column: Mid-Term (out of 20) + End of term (out of 80) = FINAL RESULTS out of 100
+        // BOT does NOT contribute to final term results. sub.total from backend includes BOT,
+        // so compute Mid-term + EOT directly here.
+        const final100 = col20 != null && eotVal != null
+          ? (col20 + eotVal)
+          : (eotVal != null ? eotVal : (col20 != null ? col20 : null))
 
         out.push({
           id: `${student.id}-${sub.subject_id}`,
@@ -311,20 +315,170 @@ export function ClassResults({ downloads = true }) {
 
 export function NotificationsPage() {
   const [page, setPage] = useState(1)
-  const { data, loading, error, reload } = useFetch('/notifications/', { page, page_size: 20 })
-  const mark = async (id) => { await api.post(`/notifications/${id}/read/`); reload() }
-  const all = async () => { await api.post('/notifications/read_all/'); reload() }
+  const [selectedKind, setSelectedKind] = useState('')
+  const [readFilter, setReadFilter] = useState('')
+  const [notifPerm, setNotifPerm] = useState(getNotificationPermission())
+
+  const params = useMemo(() => ({
+    page,
+    page_size: 20,
+    ...(selectedKind ? { kind: selectedKind } : {}),
+    ...(readFilter === 'unread' ? { is_read: 'false' } : readFilter === 'read' ? { is_read: 'true' } : {})
+  }), [page, selectedKind, readFilter])
+
+  const { data, loading, error, reload } = useFetch('/notifications/', params)
+
+  const mark = async (id) => {
+    await api.post(`/notifications/${id}/read/`)
+    reload()
+  }
+
+  const dismiss = async (id) => {
+    await api.post(`/notifications/${id}/dismiss/`)
+    reload()
+  }
+
+  const all = async () => {
+    await api.post('/notifications/read_all/')
+    reload()
+  }
+
+  const handleEnablePush = async () => {
+    const res = await requestNotificationPermission()
+    setNotifPerm(res)
+  }
+
   const list = items(data)
+  const kinds = [
+    ['', 'All Categories'],
+    ['FINANCE', 'Finance & Fees'],
+    ['ACADEMIC', 'Academics'],
+    ['ATTENDANCE', 'Attendance'],
+    ['RESULTS', 'Exam Results'],
+    ['EVENT', 'Events & Dates'],
+    ['SYSTEM', 'System Notices']
+  ]
+
   return (
     <section className="panel">
-      <div className="panel-head"><h2>Notifications</h2><button className="btn sm" onClick={all}>Mark all as read</button></div>
-      {loading && !list.length ? <Skeleton /> : error ? <ErrorState message={error} onRetry={reload} /> : !list.length ? <Empty title="You're all caught up" /> :
-        <div className="stack">{list.map((n) => (
-          <div key={n.id} className="row spread" style={{ padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: n.is_read ? 'transparent' : 'var(--primary-50)' }}>
-            <div><div className="row"><Badge>{n.kind}</Badge>{n.priority === 'HIGH' && <Badge value="HIGH" />}<b>{n.title}</b></div><div className="muted">{n.body}</div><small className="muted">{fmtDateTime(n.created_at)}</small></div>
-            {!n.is_read && <button className="btn sm" onClick={() => mark(n.id)}>Mark read</button>}
-          </div>))}
-          {data?.count > 20 && <div className="row"><button className="btn sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button><button className="btn sm" disabled={page * 20 >= data.count} onClick={() => setPage(page + 1)}>Next</button></div>}</div>}
+      <div className="panel-head">
+        <div>
+          <h2>🔔 Notification Center</h2>
+          <p className="muted">School announcements, fee receipts, academic progress, and alerts.</p>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          {isNotificationSupported() && notifPerm === 'default' && (
+            <button className="btn sm" type="button" onClick={handleEnablePush}>
+              Enable Browser Alerts
+            </button>
+          )}
+          {isNotificationSupported() && notifPerm === 'granted' && (
+            <span className="badge success">Alerts Active</span>
+          )}
+          <button className="btn sm" onClick={all}>Mark all as read</button>
+        </div>
+      </div>
+
+      {/* Filter Toolbar */}
+      <div className="row wrap" style={{ gap: 8, margin: '8px 0 16px 0' }}>
+        <div className="row wrap" style={{ gap: 6 }}>
+          {kinds.map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              className={`btn sm ${selectedKind === k ? 'primary' : ''}`}
+              onClick={() => { setSelectedKind(k); setPage(1) }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <select
+          className="input"
+          style={{ width: 'auto', marginLeft: 'auto' }}
+          value={readFilter}
+          onChange={(e) => { setReadFilter(e.target.value); setPage(1) }}
+          aria-label="Filter Read Status"
+        >
+          <option value="">All Statuses</option>
+          <option value="unread">Unread Only</option>
+          <option value="read">Read Only</option>
+        </select>
+      </div>
+
+      {loading && !list.length ? (
+        <Skeleton rows={6} />
+      ) : error ? (
+        <ErrorState message={error} onRetry={reload} />
+      ) : !list.length ? (
+        <Empty title="You're all caught up">
+          {selectedKind ? 'No notifications match this category.' : 'No new notifications.'}
+        </Empty>
+      ) : (
+        <div className="stack" style={{ gap: 10 }}>
+          {list.map((n) => (
+            <div
+              key={n.id}
+              className="row spread"
+              style={{
+                padding: '12px 16px',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                background: n.is_read ? 'transparent' : 'var(--primary-50, #f0f7ff)',
+                gap: 12,
+                alignItems: 'flex-start'
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div className="row wrap" style={{ gap: 6, alignItems: 'center', marginBottom: 4 }}>
+                  <Badge value={n.kind}>{n.kind}</Badge>
+                  {n.priority === 'HIGH' && <Badge value="HIGH">High Priority</Badge>}
+                  {!n.is_read && <span className="badge info" style={{ fontSize: 10 }}>NEW</span>}
+                  <b>{n.title}</b>
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.4, color: 'var(--text-color, #333)' }}>
+                  {n.body}
+                </div>
+                <small className="muted" style={{ display: 'block', marginTop: 4 }}>
+                  {fmtDateTime(n.created_at)}
+                </small>
+              </div>
+
+              <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+                {!n.is_read && (
+                  <button className="btn sm primary" onClick={() => mark(n.id)}>
+                    Mark read
+                  </button>
+                )}
+                <button
+                  className="btn sm"
+                  style={{ color: 'var(--muted)', background: 'transparent', border: '1px solid var(--border)' }}
+                  onClick={() => dismiss(n.id)}
+                  title="Dismiss notification"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {data?.count > 20 && (
+            <div className="row spread" style={{ marginTop: 12 }}>
+              <span className="muted">{data.count} total notifications</span>
+              <div className="row" style={{ gap: 8 }}>
+                <button className="btn sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                  Previous
+                </button>
+                <span>Page {page} of {Math.ceil(data.count / 20)}</span>
+                <button className="btn sm" disabled={page * 20 >= data.count} onClick={() => setPage(page + 1)}>
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   )
 }

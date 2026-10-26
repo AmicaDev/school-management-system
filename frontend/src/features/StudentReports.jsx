@@ -231,12 +231,11 @@ export function SingleReportCard({ student, school }) {
                 const eotVal = compVal([rawComps, comps], 'FINAL', 'EOT', 'END_OF_TERM', 'END', 'E_O_T')
 
                 // 100% column: Mid-Term (out of 20) + End of term (out of 80) = FINAL RESULTS out of 100
-                // BOT is optional and does not contribute to the final term results
-                const final100 = sub.total != null
-                  ? Number(sub.total)
-                  : (col20 != null && eotVal != null
-                      ? (col20 + eotVal)
-                      : (eotVal != null ? eotVal : (col20 != null ? col20 : 0)))
+                // BOT is optional and does NOT contribute to the final term results (excluded from 100%)
+                // sub.total from backend includes BOT, so we compute Mid-term + EOT directly here.
+                const final100 = col20 != null && eotVal != null
+                  ? (col20 + eotVal)
+                  : (eotVal != null ? eotVal : (col20 != null ? col20 : null))
 
                 // C1 calculated as ((marks obtained/20)*3)
                 const c1Raw = sub.c1 != null
