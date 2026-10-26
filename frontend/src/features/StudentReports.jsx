@@ -183,17 +183,17 @@ export function SingleReportCard({ student, school }) {
         </table>
       ) : (
         /* O-Level Template matching the reference image:
-           SUBJECT | 20% | C1 | AVG | IDENT | DESCRIPTOR | C2 | 80% | 100% | GRADE | REMARK | TEACHER'S INITIALS */
+           SUBJECT | Mid-term | C1 | AVG | IDENT | DESCRIPTOR | BOT | 80% | 100% | GRADE | REMARK | TEACHER'S INITIALS */
         <table className="rc-table">
           <thead>
             <tr>
               <th style={{ width: '22%', textAlign: 'left' }}>SUBJECT</th>
-              <th style={{ width: '7%' }}>20%</th>
+              <th style={{ width: '7%' }}>Mid-term</th>
               <th style={{ width: '6.5%' }}>C1</th>
               <th style={{ width: '6.5%' }}>AVG</th>
               <th style={{ width: '6.5%' }}>IDENT</th>
               <th style={{ width: '15%' }}>DESCRIPTOR</th>
-              <th style={{ width: '6.5%' }}>C2</th>
+              <th style={{ width: '6.5%' }}>BOT</th>
               <th style={{ width: '7%' }}>80%</th>
               <th style={{ width: '7.5%' }}>100%</th>
               <th style={{ width: '7%' }}>GRADE</th>
