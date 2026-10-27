@@ -14,7 +14,7 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 from apps.academics.models import SchoolProfile, TeachingAssignment
 from apps.attendance.models import AttendanceRecord
 from apps.results.models import Assessment, ReportComment
-from apps.results.services import term_summary
+from apps.results.services import _is_bot, _is_eot, _is_mid, term_summary
 
 
 def _grade_and_remark(score):
@@ -286,10 +286,10 @@ def build_report_card(student, term, is_mid_term=False):
             sid = r["subject_id"]
             ass_items = by_subject_ass.get(sid, [])
 
-            mid_ass = next((a for a in ass_items if a.exam_type.code.upper() in ("MID", "MIDTERM", "MID_TERM", "M_T")), None)
-            bot_ass = next((a for a in ass_items if a.exam_type.code.upper() in ("BOT", "BEGINNING_OF_TERM", "B_O_T")), None)
-            final_ass = next((a for a in ass_items if a.exam_type.code.upper() in ("FINAL", "EOT", "END", "END_OF_TERM", "E_O_T")), None)
-            c1_ass = next((a for a in ass_items if a.exam_type.code.upper() in ("C1", "COMPETENCY1", "COMPETENCY_1")), None)
+            mid_ass = next((a for a in ass_items if _is_mid(a.exam_type)), None)
+            bot_ass = next((a for a in ass_items if _is_bot(a.exam_type)), None)
+            final_ass = next((a for a in ass_items if _is_eot(a.exam_type)), None)
+            c1_ass = next((a for a in ass_items if getattr(a.exam_type, "code", "").upper() in ("C1", "COMPETENCY1", "COMPETENCY_1")), None)
 
             # 20% Column: Mid-Term marks out of 20 (BOT excluded; fallback if only legacy BOT exists)
             active_ca = mid_ass if mid_ass else (bot_ass if bot_ass else None)
@@ -301,6 +301,10 @@ def build_report_card(student, term, is_mid_term=False):
                 c1_num = round(float(c1_ass.score), 1)
                 col_20_val = round((c1_num / 3.0) * 20.0, 1)
                 col_20_str = f"{col_20_val:g}"
+            elif r.get("mid_score") is not None:
+                col_20_val = float(r["mid_score"])
+                col_20_str = f"{col_20_val:g}"
+                c1_num = round((col_20_val / 20.0) * 3.0, 1)
             else:
                 col_20_val = None
                 col_20_str = ""
@@ -312,6 +316,9 @@ def build_report_card(student, term, is_mid_term=False):
             # 80% Column: End of term examination (out of 80)
             if final_ass:
                 col_80_val = float(final_ass.score)
+                col_80_str = f"{col_80_val:g}"
+            elif r.get("eot_score") is not None:
+                col_80_val = float(r["eot_score"])
                 col_80_str = f"{col_80_val:g}"
             else:
                 col_80_val = None

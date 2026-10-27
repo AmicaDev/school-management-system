@@ -52,6 +52,23 @@ function remarkPreview(g) {
   return { A: 'EXCELLENT', B: 'VERY GOOD', C: 'GOOD', D: 'FAIR', E: 'POOR' }[g] || ''
 }
 
+const normCode = (k) => String(k || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+
+const isMidTermKey = (k) => {
+  const n = normCode(k)
+  return n === 'MID' || n === 'MIDTERM' || n === 'MT' || n.includes('MID')
+}
+
+const isEotKey = (k) => {
+  const n = normCode(k)
+  return n === 'FINAL' || n === 'EOT' || n === 'END' || n.includes('ENDOFTERM') || n.includes('FINAL') || n.includes('EOT')
+}
+
+const isBotKey = (k) => {
+  const n = normCode(k)
+  return n === 'BOT' || n.includes('BEGINNINGOFTERM') || n.includes('BOT') || n.includes('BEGIN')
+}
+
 // Look up a component value case-insensitively across raw_components and components objects.
 // Exam type codes (BOT, MID, FINAL, etc.) may arrive with varying key casing.
 const compVal = (objs, ...cands) => {
@@ -59,7 +76,7 @@ const compVal = (objs, ...cands) => {
     if (!obj || typeof obj !== 'object') continue
     for (const cand of cands) {
       if (obj[cand] != null) return Number(obj[cand])
-      const ik = Object.keys(obj).find((k) => String(k).toUpperCase() === String(cand).toUpperCase())
+      const ik = Object.keys(obj).find((k) => normCode(k) === normCode(cand))
       if (ik && obj[ik] != null) return Number(obj[ik])
     }
   }
@@ -221,17 +238,40 @@ export function SingleReportCard({ student, school }) {
               const rows = subjects.length ? subjects.map((sub, i) => {
                 const rawComps = sub.raw_components || {}
                 const comps = sub.components || {}
-                // Continuous assessment score: Mid-Term marks entered out of 20 (BOT excluded)
-                const midVal = compVal([rawComps, comps], 'MID', 'MIDTERM', 'MID_TERM', 'M_T', 'MID-TERM')
-                const botVal = compVal([rawComps, comps], 'BOT', 'BEGINNING_OF_TERM', 'B_O_T')
-                const col20 = midVal != null ? midVal : (sub.mid_score != null ? sub.mid_score : (botVal != null ? botVal : null))
+                const allComps = { ...comps, ...rawComps }
 
-                // 80% column: End of term examination (out of 80)
-                const eotVal = compVal([rawComps, comps], 'FINAL', 'EOT', 'END_OF_TERM', 'END', 'E_O_T')
+                let midVal = sub.mid_score != null ? Number(sub.mid_score) : null
+                let eotVal = sub.eot_score != null ? Number(sub.eot_score) : null
+                let botVal = null
+
+                for (const [k, v] of Object.entries(allComps)) {
+                  if (v == null || v === '') continue
+                  const num = Number(v)
+                  if (isNaN(num)) continue
+                  if (isMidTermKey(k)) {
+                    if (midVal == null) midVal = num
+                  } else if (isEotKey(k)) {
+                    if (eotVal == null) eotVal = num
+                  } else if (isBotKey(k)) {
+                    if (botVal == null) botVal = num
+                  }
+                }
+
+                // Continuous assessment score: Mid-Term marks entered out of 20 (BOT excluded)
+                let col20 = midVal != null ? midVal : (sub.mid_score != null ? Number(sub.mid_score) : (botVal != null ? botVal : null))
+                let col80 = eotVal != null ? eotVal : (sub.eot_score != null ? Number(sub.eot_score) : null)
+
+                if (col80 == null && col20 == null && sub.total != null) {
+                  const totNum = Number(sub.total)
+                  if (totNum > 20) {
+                    col80 = totNum
+                  } else {
+                    col20 = totNum
+                  }
+                }
 
                 // 100% column: Mid-Term (out of 20) + End of term (out of 80) = FINAL RESULTS out of 100
                 // BOT is completely excluded from the 100% final score
-                const col80 = eotVal != null ? eotVal : (sub.eot_score != null ? sub.eot_score : null)
                 const final100 = col20 != null && col80 != null
                   ? (col20 + col80)
                   : (col80 != null ? col80 : (col20 != null ? col20 : (sub.total != null ? Number(sub.total) : null)))
@@ -562,9 +602,21 @@ export function MidTermReportCard({ student, school }) {
             const rows = subjects.length ? subjects.map((sub, i) => {
               const rawComps = sub.raw_components || {}
               const comps = sub.components || {}
-              const botVal = compVal([rawComps, comps], 'BOT', 'BEGINNING_OF_TERM', 'B_O_T')
-              const midVal = compVal([rawComps, comps], 'MID', 'MIDTERM', 'MID_TERM', 'M_T', 'MID-TERM')
-              const col20 = midVal != null ? midVal : null
+              const allComps = { ...comps, ...rawComps }
+              let midVal = sub.mid_score != null ? Number(sub.mid_score) : null
+              let botVal = null
+
+              for (const [k, v] of Object.entries(allComps)) {
+                if (v == null || v === '') continue
+                const num = Number(v)
+                if (isNaN(num)) continue
+                if (isMidTermKey(k)) {
+                  if (midVal == null) midVal = num
+                } else if (isBotKey(k)) {
+                  if (botVal == null) botVal = num
+                }
+              }
+              const col20 = midVal != null ? midVal : (sub.mid_score != null ? Number(sub.mid_score) : (botVal != null ? botVal : null))
 
               const c1Raw = sub.c1 != null ? Number(sub.c1) : (col20 != null ? (col20 / 20.0) * 3.0 : (comps['C1'] != null ? Number(comps['C1']) : null))
               const c1 = c1Raw != null ? Number(c1Raw.toFixed(1)) : null

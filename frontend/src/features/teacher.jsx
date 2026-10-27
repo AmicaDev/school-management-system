@@ -422,14 +422,40 @@ export function Marks({ only }) {
     return () => clearTimeout(t)
   }, [edits, maxes, draftKey, grid])
 
-  const allExamTypes = (grid?.exam_types || []).filter((t) => t.code !== 'BOT')
+  const isBotType = (code) => {
+    const n = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+    return n === 'BOT' || n.includes('BOT') || n.includes('BEGIN')
+  }
+
+  const isMidType = (code) => {
+    const c = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+    return c === 'MID' || c === 'MIDTERM' || c === 'MT' || c.includes('MID')
+  }
+
+  const isFinalType = (code) => {
+    const c = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+    return c === 'FINAL' || c === 'EOT' || c === 'END' || c.includes('FINAL') || c.includes('EOT') || c.includes('ENDOFTERM')
+  }
+
+  const allExamTypes = (grid?.exam_types || []).filter((t) => !isBotType(t.code))
   const types = allExamTypes.filter((t) => {
     if (only && !only.includes(t.code)) return false
     if (examTypeFilter && t.code !== examTypeFilter) return false
     return true
   })
 
-  const cellVal = (r, code) => edits[`${r.student}:${code}`] ?? (r.cells[code] ? String(r.cells[code].score) : '')
+  const cellVal = (r, code) => {
+    if (edits[`${r.student}:${code}`] !== undefined) return edits[`${r.student}:${code}`]
+    if (r.cells && r.cells[code]) return String(r.cells[code].score)
+    const norm = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+    const targetNorm = norm(code)
+    for (const [k, v] of Object.entries(r.cells || {})) {
+      if (norm(k) === targetNorm && v) return String(v.score)
+      if (targetNorm === 'MID' && isMidType(k) && v) return String(v.score)
+      if (targetNorm === 'FINAL' && isFinalType(k) && v) return String(v.score)
+    }
+    return ''
+  }
   const invalid = (r, code) => {
     const v = cellVal(r, code)
     if (v === '') return ''
@@ -648,8 +674,8 @@ export function Marks({ only }) {
                 <tr>
                   <th style={{ minWidth: 160 }}>Student</th>
                   {types.map((t) => {
-                    const isMid = t.code === 'MID'
-                    const isFinal = t.code === 'FINAL' || t.code === 'EOT'
+                    const isMid = isMidType(t.code)
+                    const isFinal = isFinalType(t.code)
                     const defaultOut = isMid ? 20 : isFinal ? 80 : (t.default_max || 100)
                     return (
                       <Fragment key={t.code}>
@@ -725,7 +751,7 @@ export function Marks({ only }) {
                       </td>
                       {types.map((t, ci) => {
                         const err = invalid(r, t.code)
-                        const isMid = t.code === 'MID'
+                        const isMid = isMidType(t.code)
                         return (
                           <Fragment key={t.code}>
                             <td>

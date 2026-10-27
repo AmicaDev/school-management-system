@@ -14,7 +14,7 @@ from apps.people.models import Student
 from apps.users.permissions import IsAdminOrTeacher, IsSchoolUser
 
 from .models import Assessment, ReportComment
-from .services import _subject_rows, grade_for, term_summary, trend
+from .services import _is_bot, _is_eot, _is_mid, _subject_rows, grade_for, term_summary, trend
 
 
 class AssessmentSerializer(serializers.ModelSerializer):
@@ -192,6 +192,17 @@ def grid(request):
         cells = {}
         for a in items:
             cells.setdefault(a.exam_type.code, {"score": a.score, "max": a.max_score})
+            if _is_mid(a.exam_type):
+                cells.setdefault("MID", {"score": a.score, "max": a.max_score})
+                cells.setdefault("MID_TERM", {"score": a.score, "max": a.max_score})
+                cells.setdefault("MID-TERM", {"score": a.score, "max": a.max_score})
+            elif _is_eot(a.exam_type):
+                cells.setdefault("FINAL", {"score": a.score, "max": a.max_score})
+                cells.setdefault("EOT", {"score": a.score, "max": a.max_score})
+                cells.setdefault("END_OF_TERM", {"score": a.score, "max": a.max_score})
+                cells.setdefault("END-OF-TERM", {"score": a.score, "max": a.max_score})
+            elif _is_bot(a.exam_type):
+                cells.setdefault("BOT", {"score": a.score, "max": a.max_score})
         rows.append({"student": s.id, "name": s.full_name, "index_no": s.index_no, "cells": cells,
                      "c1": sub[0].get("c1") if sub else None,
                      "c2": sub[0].get("c2") if sub else None,
@@ -203,11 +214,11 @@ def grid(request):
     exam_types_data = []
     for e in ets:
         def_max = e.default_max
-        if e.code == "BOT" and def_max == Decimal("100"):
+        if _is_bot(e) and def_max == Decimal("100"):
             def_max = Decimal("20")
-        elif e.code == "MID" and def_max == Decimal("100"):
+        elif _is_mid(e) and def_max == Decimal("100"):
             def_max = Decimal("20")
-        elif e.code in ("FINAL", "EOT") and def_max == Decimal("100"):
+        elif _is_eot(e) and def_max == Decimal("100"):
             def_max = Decimal("80")
         exam_types_data.append({"id": e.id, "code": e.code, "name": e.name, "default_max": def_max})
     return Response({"paper_number": paper_number,

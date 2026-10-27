@@ -4,6 +4,7 @@ Per subject: each exam type's percentage is the mean of that type's assessments 
 weighted mean over the exam types that have data, using ExamType.weight. Grade/remark come from the configurable GradeBand
 table. The overall average is the mean of subject marks; class position ranks students in the same stream by that average.
 """
+import re
 from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -17,6 +18,51 @@ from .models import Assessment
 
 Q2 = Decimal("0.01")
 PCT = Cast(F("score") * 100 / F("max_score"), FloatField())  # percentage of max, as float
+
+
+def _is_mid(et):
+    if not et:
+        return False
+    c = re.sub(r"[^A-Z0-9]", "", (getattr(et, "code", "") or "").upper())
+    n = re.sub(r"[^A-Z0-9]", "", (getattr(et, "name", "") or "").upper())
+    return (
+        c in ("MID", "MIDTERM", "MT", "CA", "CONTINUOUS")
+        or "MID" in c
+        or "MID" in n
+        or "CONTINUOUS" in n
+    )
+
+
+def _is_eot(et):
+    if not et:
+        return False
+    c = re.sub(r"[^A-Z0-9]", "", (getattr(et, "code", "") or "").upper())
+    n = re.sub(r"[^A-Z0-9]", "", (getattr(et, "name", "") or "").upper())
+    return (
+        c in ("FINAL", "EOT", "END", "ENDOFTERM", "EXAM")
+        or "FINAL" in c
+        or "FINAL" in n
+        or "EOT" in c
+        or "EOT" in n
+        or "END" in c
+        or "END" in n
+        or "EXAM" in c
+        or "EXAM" in n
+    )
+
+
+def _is_bot(et):
+    if not et:
+        return False
+    c = re.sub(r"[^A-Z0-9]", "", (getattr(et, "code", "") or "").upper())
+    n = re.sub(r"[^A-Z0-9]", "", (getattr(et, "name", "") or "").upper())
+    return (
+        c in ("BOT", "BEGINNINGOFTERM")
+        or "BOT" in c
+        or "BOT" in n
+        or "BEGIN" in c
+        or "BEGIN" in n
+    )
 
 
 def grade_for(mark, bands=None):
@@ -53,34 +99,66 @@ def _subject_rows(assessments, bands, exam_types, teacher_initials=None):
     for a in assessments:
         by_subject[a.subject_id][a.exam_type_id].append(a)
         names[a.subject_id] = (a.subject.name, a.subject.code)
+
+    all_et_map = {e.id: e for e in exam_types} if exam_types else {}
+
     rows = []
     for sid, per_type in by_subject.items():
         parts, raw_parts, wsum, wtot = {}, {}, Decimal(0), Decimal(0)
         bot_score = None
         eot_score = None
         mid_score = None
-        for et in exam_types:
-            ass_list = per_type.get(et.id)
-            if ass_list:
-                pct = sum(a.percent for a in ass_list) / len(ass_list)
-                raw_sc = sum(a.score for a in ass_list) / len(ass_list)
-                code_upper = et.code.upper()
-                if code_upper in ("FINAL", "EOT", "END", "END_OF_TERM", "E_O_T"):
-                    # Final Term Exams (80) should not be converted to percentage;
-                    # marks obtained at final is taken as obtained (e.g. 20 is 20, not 25%).
-                    eot_score = raw_sc
-                    parts[et.code] = raw_sc.quantize(Q2, ROUND_HALF_UP)
-                elif code_upper in ("BOT", "BEGINNING_OF_TERM", "B_O_T"):
-                    bot_score = raw_sc
-                    parts[et.code] = raw_sc.quantize(Q2, ROUND_HALF_UP)
-                elif code_upper in ("MID", "MIDTERM", "MID_TERM", "M_T"):
-                    mid_score = raw_sc
-                    parts[et.code] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+
+        for et_id in per_type.keys():
+            if et_id not in all_et_map:
+                try:
+                    all_et_map[et_id] = ExamType.objects.get(pk=et_id)
+                except Exception:
+                    pass
+
+        for et_id, ass_list in per_type.items():
+            et = all_et_map.get(et_id)
+            if not ass_list:
+                continue
+            pct = sum(a.percent for a in ass_list) / len(ass_list)
+            raw_sc = sum(a.score for a in ass_list) / len(ass_list)
+            code_str = et.code if et else f"ET_{et_id}"
+            name_str = et.name if et else code_str
+
+            if _is_eot(et):
+                eot_score = raw_sc
+                parts[code_str] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+                parts["FINAL"] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+                parts["EOT"] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+            elif _is_bot(et):
+                bot_score = raw_sc
+                parts[code_str] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+                parts["BOT"] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+            elif _is_mid(et):
+                mid_score = raw_sc
+                parts[code_str] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+                parts["MID"] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+                parts["MID_TERM"] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+                parts["MID-TERM"] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+            else:
+                max_sc = sum(a.max_score for a in ass_list) / len(ass_list)
+                if max_sc <= Decimal("25"):
+                    if mid_score is None:
+                        mid_score = raw_sc
+                        parts["MID"] = raw_sc.quantize(Q2, ROUND_HALF_UP)
                 else:
-                    parts[et.code] = pct.quantize(Q2, ROUND_HALF_UP)
-                raw_parts[et.code] = raw_sc.quantize(Q2, ROUND_HALF_UP)
-                wsum += pct * et.weight
-                wtot += et.weight
+                    if eot_score is None:
+                        eot_score = raw_sc
+                        parts["FINAL"] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+                        parts["EOT"] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+                parts[code_str] = pct.quantize(Q2, ROUND_HALF_UP)
+
+            raw_parts[code_str] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+            if name_str and name_str != code_str:
+                raw_parts[name_str] = raw_sc.quantize(Q2, ROUND_HALF_UP)
+            weight = et.weight if et else Decimal(0)
+            wsum += pct * weight
+            wtot += weight
 
         # Calculation rule:
         # BOT is completely EXCLUDED from final score calculations.
@@ -145,7 +223,7 @@ def _subject_rows(assessments, bands, exam_types, teacher_initials=None):
 
 def term_summary(student, term):
     bands = list(GradeBand.objects.all())
-    ets = list(ExamType.objects.filter(is_active=True))
+    ets = list(ExamType.objects.all())
     qs = Assessment.objects.filter(student=student, term=term).select_related("subject")
     teacher_initials = {}
     if getattr(student, "stream_id", None):
