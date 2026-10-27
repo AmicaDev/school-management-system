@@ -1165,7 +1165,7 @@ export function FinancialReportsPage() {
         >
           {/* Header */}
           <div style={{ textAlign: 'center', borderBottom: '2px solid #333', paddingBottom: 14 }}>
-            <h2 style={{ margin: 0, textTransform: 'uppercase' }}>{data.school_name || "ST. JOSEPH'S SECONDARY SCHOOL"}</h2>
+            <h2 style={{ margin: 0, textTransform: 'uppercase' }}>{data.school_name || "KIYINGI MEMORIAL SECONDARY SCHOOL"}</h2>
             <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>
               TERM FINANCIAL RECONCILIATION STATEMENT · {data.term_name || 'TERM'}
             </div>
