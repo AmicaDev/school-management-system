@@ -487,7 +487,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
    ===================================================================== */
 .mt-report-page {
   position: relative;
-  background: #FAF0D7 !important;
+  background: #FFFACD !important;
   color: #000000 !important;
   border: 3.5px solid #104a8e;
   border-radius: 0;
@@ -647,7 +647,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
     max-width: 100% !important;
     height: 280mm !important;
     box-sizing: border-box !important;
-    background: #FAF0D7 !important;
+    background: #FFFACD !important;
     border: 3.5px solid #104a8e !important;
     box-shadow: none !important;
     page-break-after: always !important;

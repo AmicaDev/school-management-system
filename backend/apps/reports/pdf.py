@@ -46,9 +46,9 @@ def build_report_card(student, term, is_mid_term=False):
     stream_name = student.stream.name if student.stream else ""
     is_a_level = bool(re.search(r"\b(?:s\.?[56]|senior\s*(?:5|6|five|six)|a[\s\-_]?level)\b", class_name, re.I))
     is_mt = bool(is_mid_term or getattr(term, "is_mid_term", False) or ("MID" in getattr(term, "name", "").upper()))
-    # Mid-Term: warm, soft light gold with a slight yellow-amber tint (#FAF0D7)
+    # Mid-Term: pale yellow (#FFFACD)
     # End Of Term: vivid, bright neon green (or lime green) (#39FF14)
-    page_bg_color = colors.HexColor("#FAF0D7") if is_mt else colors.HexColor("#39FF14")
+    page_bg_color = colors.HexColor("#FFFACD") if is_mt else colors.HexColor("#39FF14")
 
     # Look up teacher initials per subject
     teacher_initials = {}
@@ -676,7 +676,7 @@ def build_report_card(student, term, is_mid_term=False):
     def draw_page_decorations(canvas, _doc):
         canvas.saveState()
         # 1. Page background fill
-        # Mid-Term: warm, soft light gold with slight yellow-amber tint (#FAF0D7)
+        # Mid-Term: pale yellow (#FFFACD)
         # End Of Term: vivid, bright neon green (#39FF14)
         canvas.setFillColor(page_bg_color)
         canvas.rect(0, 0, 210 * mm, 297 * mm, fill=1, stroke=0)
