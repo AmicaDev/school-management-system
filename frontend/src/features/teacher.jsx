@@ -7,7 +7,7 @@ import { useApp } from '../contexts/AppContext'
 import { dbGet, dbPut, dbDel } from '../offline/db'
 import { enqueue } from '../offline/queue'
 import { Alert, Badge, Empty, ErrorState, Skeleton, Table, fmtDateTime } from '../components/ui'
-import { TermSelect, useTerms } from './Shared'
+import { TermSelect, useTerms, getIdentifierInfo } from './Shared'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const STATES = [['PRESENT', 'P', 'Present'], ['ABSENT', 'A', 'Absent'], ['LATE', 'L', 'Late'], ['EXCUSED', 'E', 'Excused']]
@@ -15,7 +15,7 @@ const STATES = [['PRESENT', 'P', 'Present'], ['ABSENT', 'A', 'Absent'], ['LATE',
 /** Streams this teacher may work with (assigned subjects + classes they are class teacher of). */
 export function useMyStreams() {
   const { user } = useAuth()
-  const a = useFetch('/academics/assignments/', { page_size: 200 })
+  const a = useFetch('/academics/assignments/', { page_size: 500 })
   const s = useFetch('/academics/streams/')
   const c = useFetch('/academics/classes/')
   const subFetch = useFetch('/academics/subjects/', { page_size: 200 })
@@ -29,18 +29,18 @@ export function useMyStreams() {
   }, [assignments])
 
   const assignedStreamIds = useMemo(() => {
-    if (user?.role === 'ADMIN') return new Set(allStreams.map((x) => x.id))
-    const ids = new Set(activeAssignments.map((x) => x.stream))
-    allStreams.filter((x) => x.class_teacher === user.id).forEach((x) => ids.add(x.id))
+    if (user?.role === 'ADMIN') return new Set(allStreams.map((x) => Number(x.id)))
+    const ids = new Set(activeAssignments.map((x) => Number(x.stream)))
+    allStreams.filter((x) => String(x.class_teacher) === String(user?.id)).forEach((x) => ids.add(Number(x.id)))
     return ids
   }, [activeAssignments, allStreams, user?.id, user?.role])
 
   const assignedClassIds = useMemo(() => {
-    if (user?.role === 'ADMIN') return new Set(allClasses.map((cl) => cl.id))
+    if (user?.role === 'ADMIN') return new Set(allClasses.map((cl) => Number(cl.id)))
     const ids = new Set()
     allStreams.forEach((st) => {
-      if (assignedStreamIds.has(st.id) && st.school_class) {
-        ids.add(st.school_class)
+      if (assignedStreamIds.has(Number(st.id)) && st.school_class) {
+        ids.add(Number(st.school_class))
       }
     })
     return ids
@@ -48,7 +48,7 @@ export function useMyStreams() {
 
   const streams = useMemo(() => {
     if (user?.role === 'ADMIN') return allStreams
-    return allStreams.filter((x) => assignedStreamIds.has(x.id))
+    return allStreams.filter((x) => assignedStreamIds.has(Number(x.id)))
   }, [allStreams, assignedStreamIds, user?.role])
 
   return {
@@ -422,7 +422,7 @@ export function Marks({ only }) {
     return () => clearTimeout(t)
   }, [edits, maxes, draftKey, grid])
 
-  const allExamTypes = grid?.exam_types || []
+  const allExamTypes = (grid?.exam_types || []).filter((t) => t.code !== 'BOT')
   const types = allExamTypes.filter((t) => {
     if (only && !only.includes(t.code)) return false
     if (examTypeFilter && t.code !== examTypeFilter) return false
@@ -648,10 +648,9 @@ export function Marks({ only }) {
                 <tr>
                   <th style={{ minWidth: 160 }}>Student</th>
                   {types.map((t) => {
-                    const isBot = t.code === 'BOT'
                     const isMid = t.code === 'MID'
                     const isFinal = t.code === 'FINAL' || t.code === 'EOT'
-                    const defaultOut = isBot ? 20 : isMid ? 20 : isFinal ? 80 : (t.default_max || 100)
+                    const defaultOut = isMid ? 20 : isFinal ? 80 : (t.default_max || 100)
                     return (
                       <Fragment key={t.code}>
                         <th>
@@ -669,19 +668,17 @@ export function Marks({ only }) {
                             />
                           </small>
                         </th>
-                        {isBot && (
-                          <th style={{ minWidth: 70, textAlign: 'center' }}>
-                            C1
-                            <br />
-                            <small className="muted">(out of 3.0)</small>
-                          </th>
-                        )}
                         {isMid && (
-                          <th style={{ minWidth: 70, textAlign: 'center' }}>
-                            C2
-                            <br />
-                            <small className="muted">(out of 3.0)</small>
-                          </th>
+                          <>
+                            <th style={{ minWidth: 65, textAlign: 'center' }}>
+                              C1
+                              <br />
+                              <small className="muted">(out of 3.0)</small>
+                            </th>
+                            <th style={{ minWidth: 60, textAlign: 'center' }}>AVG</th>
+                            <th style={{ minWidth: 60, textAlign: 'center' }}>IDENT</th>
+                            <th style={{ minWidth: 90, textAlign: 'center' }}>DESCRIPTOR</th>
+                          </>
                         )}
                       </Fragment>
                     )
@@ -693,30 +690,26 @@ export function Marks({ only }) {
               </thead>
               <tbody>
                 {grid.rows.map((r, ri) => {
-                  const botVal = cellVal(r, 'BOT')
                   const midVal = cellVal(r, 'MID')
                   const finalVal = cellVal(r, 'FINAL') || cellVal(r, 'EOT')
-                  const botMax = Number(maxes['BOT']) || 20
                   const midMax = Number(maxes['MID']) || 20
 
-                  // C1 dynamically calculated as ((marks obtained / 20) * 3)
-                  const c1Display = botVal !== '' && !isNaN(Number(botVal))
-                    ? ((Number(botVal) / botMax) * 3).toFixed(1)
+                  // C1 dynamically calculated as ((marks obtained / 20) * 3) from Mid-Term
+                  const c1Display = midVal !== '' && !isNaN(Number(midVal))
+                    ? ((Number(midVal) / midMax) * 3).toFixed(1)
                     : (r.c1 != null ? Number(r.c1).toFixed(1) : '—')
 
-                  // Mid-Term marks out of 20 converted to C2
-                  const c2Display = midVal !== '' && !isNaN(Number(midVal))
-                    ? ((Number(midVal) / midMax) * 3).toFixed(1)
-                    : (r.c2 != null ? Number(r.c2).toFixed(1) : '—')
+                  const avgDisplay = c1Display
+                  const idInfo = getIdentifierInfo(c1Display !== '—' ? Number(c1Display) : null)
 
-                  // Total: BOT contributes 20 of 80 marks for final year to give total of 100
-                  // Mid-Term is NOT calculated in the final term results
+                  // Total: Mid-Term (out of 20) + End of Term (out of 80) = Final score out of 100
+                  // BOT is completely excluded
                   let displayTotal = r.total != null ? `${r.total}%` : '—'
-                  if (botVal !== '' && finalVal !== '' && !isNaN(Number(botVal)) && !isNaN(Number(finalVal))) {
-                    displayTotal = `${(Number(botVal) + Number(finalVal)).toFixed(1)}%`
-                  } else if (botVal !== '' && !isNaN(Number(botVal)) && finalVal === '') {
-                    displayTotal = `${Number(botVal).toFixed(1)}%`
-                  } else if (finalVal !== '' && !isNaN(Number(finalVal)) && botVal === '') {
+                  if (midVal !== '' && finalVal !== '' && !isNaN(Number(midVal)) && !isNaN(Number(finalVal))) {
+                    displayTotal = `${(Number(midVal) + Number(finalVal)).toFixed(1)}%`
+                  } else if (midVal !== '' && !isNaN(Number(midVal)) && finalVal === '') {
+                    displayTotal = `${Number(midVal).toFixed(1)}%`
+                  } else if (finalVal !== '' && !isNaN(Number(finalVal)) && midVal === '') {
                     displayTotal = `${Number(finalVal).toFixed(1)}%`
                   }
 
@@ -732,7 +725,6 @@ export function Marks({ only }) {
                       </td>
                       {types.map((t, ci) => {
                         const err = invalid(r, t.code)
-                        const isBot = t.code === 'BOT'
                         const isMid = t.code === 'MID'
                         return (
                           <Fragment key={t.code}>
@@ -749,15 +741,21 @@ export function Marks({ only }) {
                                 onKeyDown={(e) => nav(e, ri, ci)}
                               />
                             </td>
-                            {isBot && (
-                              <td className="ro" style={{ textAlign: 'center', fontWeight: 600, color: 'var(--primary)' }}>
-                                {c1Display}
-                              </td>
-                            )}
                             {isMid && (
-                              <td className="ro" style={{ textAlign: 'center', fontWeight: 600, color: 'var(--primary)' }}>
-                                {c2Display}
-                              </td>
+                              <>
+                                <td className="ro" style={{ textAlign: 'center', fontWeight: 600, color: 'var(--primary)' }}>
+                                  {c1Display}
+                                </td>
+                                <td className="ro" style={{ textAlign: 'center', fontWeight: 600 }}>
+                                  {avgDisplay}
+                                </td>
+                                <td className="ro" style={{ textAlign: 'center', fontWeight: 700 }}>
+                                  {idInfo.ident}
+                                </td>
+                                <td className="ro" style={{ textAlign: 'center', fontSize: 11, fontWeight: 600 }}>
+                                  {idInfo.desc}
+                                </td>
+                              </>
                             )}
                           </Fragment>
                         )

@@ -134,7 +134,7 @@ function BatchCards({ stream, termId }) {
   )
 }
 
-function getIdentifierInfo(c1) {
+export function getIdentifierInfo(c1) {
   if (c1 == null) return { ident: '—', desc: '—' }
   const raw = Math.round(Number(c1))
   if (raw <= 1) return { ident: 1, desc: 'BASIC' }
@@ -168,6 +168,13 @@ export function ClassResults({ downloads = true }) {
   const [busy, setBusy] = useState(null)
 
   useEffect(() => { if (active && !termId) setTermId(active.id) }, [active, termId])
+
+  useEffect(() => {
+    if (!stream && streams.data) {
+      const list = items(streams.data)
+      if (list.length > 0) setStream(String(list[0].id))
+    }
+  }, [streams.data, stream])
 
   const res = useFetch(stream && termId ? '/results/class-summary/' : null, { stream, term: termId, detailed: 1 })
 
@@ -204,27 +211,25 @@ export function ClassResults({ downloads = true }) {
         if (subjectFilter && String(sub.subject_id) !== String(subjectFilter)) return
         const rawComps = sub.raw_components || {}
         const comps = sub.components || {}
-        const botVal = compVal([rawComps, comps], 'BOT', 'BEGINNING_OF_TERM', 'B_O_T')
         const midVal = compVal([rawComps, comps], 'MID', 'MIDTERM', 'MID_TERM', 'M_T')
+        const botVal = compVal([rawComps, comps], 'BOT', 'BEGINNING_OF_TERM', 'B_O_T')
         const eotVal = compVal([rawComps, comps], 'FINAL', 'EOT', 'END_OF_TERM', 'END', 'E_O_T')
 
-        const col20 = midVal != null ? midVal : null
+        // Continuous assessment score: Mid-Term (out of 20) replaces BOT. BOT is excluded.
+        const col20 = midVal != null ? midVal : (sub.mid_score != null ? sub.mid_score : (botVal != null ? botVal : null))
         const c1Raw = sub.c1 != null ? Number(sub.c1) : (col20 != null ? (col20 / 20.0) * 3.0 : (comps['C1'] != null ? Number(comps['C1']) : null))
         const c1 = c1Raw != null ? Number(c1Raw.toFixed(1)) : null
 
-        const c2Raw = sub.c2 != null ? Number(sub.c2) : (botVal != null ? (botVal / 20.0) * 3.0 : c1)
-        const c2 = c2Raw != null ? Number(c2Raw.toFixed(1)) : c1
-
-        const avgRaw = (c1 != null && c2 != null) ? (c1 + c2) / 2.0 : (c1 != null ? c1 : c2)
+        const avgRaw = sub.avg != null ? Number(sub.avg) : c1
         const avg = avgRaw != null ? Number(avgRaw.toFixed(1)) : null
         const idInfo = getIdentifierInfo(avg != null ? avg : c1)
 
         // 100% column: Mid-Term (out of 20) + End of term (out of 80) = FINAL RESULTS out of 100
-        // BOT does NOT contribute to final term results. sub.total from backend includes BOT,
-        // so compute Mid-term + EOT directly here.
-        const final100 = col20 != null && eotVal != null
-          ? (col20 + eotVal)
-          : (eotVal != null ? eotVal : (col20 != null ? col20 : null))
+        // BOT is completely excluded from final score calculations.
+        const col80 = eotVal != null ? eotVal : (sub.eot_score != null ? sub.eot_score : null)
+        const final100 = col20 != null && col80 != null
+          ? (col20 + col80)
+          : (col80 != null ? col80 : (col20 != null ? col20 : (sub.total != null ? Number(sub.total) : null)))
 
         out.push({
           id: `${student.id}-${sub.subject_id}`,
@@ -235,13 +240,12 @@ export function ClassResults({ downloads = true }) {
           mid: col20 != null ? col20 : '—',
           c1: c1 != null ? c1 : '—',
           avg: avg != null ? avg : '—',
-          ident: idInfo.ident,
-          descr: idInfo.desc,
-          bot: botVal != null ? botVal : '—',
-          eot: eotVal != null ? eotVal : '—',
+          ident: sub.ident || idInfo.ident,
+          descr: sub.descriptor || idInfo.desc,
+          eot: col80 != null ? col80 : '—',
           final_mark: final100 != null ? `${final100}%` : '—',
-          grade: sub.grade || '—',
-          remark: sub.remark || '—',
+          grade: sub.grade || (final100 != null ? gradePreview(final100) : '—'),
+          remark: sub.remark || (final100 != null ? remarkPreview(gradePreview(final100)) : '—'),
           tr_initials: sub.teacher_initials || 'TR',
         })
       })
@@ -252,13 +256,12 @@ export function ClassResults({ downloads = true }) {
   const detailedCols = [
     { key: 'name', label: 'Name of student' },
     { key: 'subject', label: 'Subject' },
-    { key: 'mid', label: 'Mid-Term' },
+    { key: 'mid', label: 'Mid-Term (20)' },
     { key: 'c1', label: 'C1' },
     { key: 'avg', label: 'AVG' },
     { key: 'ident', label: 'IDENT' },
     { key: 'descr', label: 'DESCRIPTOR' },
-    { key: 'bot', label: 'BOT (out of 20)' },
-    { key: 'eot', label: 'End Of Term (Out of 80)' },
+    { key: 'eot', label: 'End Of Term (80)' },
     { key: 'final_mark', label: 'Final Mark (100)' },
     { key: 'grade', label: 'GRADE' },
     { key: 'remark', label: 'REMARKS' },

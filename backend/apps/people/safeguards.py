@@ -10,6 +10,8 @@ def check_student_eligible_for_permanent_deletion(student):
       - The student is referenced by report comments.
       - The student has financial invoices or payments (when finance module is present).
     """
+    if not student.is_archived:
+        return False, "Record must be archived before it can be permanently deleted."
     if student.assessments.exists():
         return False, f"Linked to {student.assessments.count()} academic assessment mark(s). Cannot delete to protect historical academic records."
     if student.attendance.exists():

@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, Tooltip, XAxis, YAxis } from 'recharts'
 import { api, errorMessage, items, mediaUrl } from '../services/api'
 import { useFetch } from '../hooks/useFetch'
 import { useApp } from '../contexts/AppContext'
-import { Alert, Empty, ErrorState, Skeleton, Tabs, fmtDateTime } from '../components/ui'
+import { Alert, Empty, ErrorState, Modal, Skeleton, Tabs, fmtDate, fmtDateTime } from '../components/ui'
 import ResourcePage from './ResourcePage'
 import { Chart } from './Shared'
 import { R } from './resources'
@@ -277,10 +277,12 @@ export function ImportPanel({ kind, title, columns, note }) {
 }
 
 export function TeacherAssignmentsPage() {
-  const [tab, setTab] = useState('By Teacher')
+  const [tab, setTab] = useState('All Assignments')
   const [search, setSearch] = useState('')
   const [selectedClass, setSelectedClass] = useState('')
-  const [modalTeacher, setModalTeacher] = useState(null)
+  const [selectedSubject, setSelectedSubject] = useState('')
+  const [selectedTeacher, setSelectedTeacher] = useState('')
+  const [selectedStatus, setSelectedStatus] = useState('all')
   const [form, setForm] = useState(null)
   const [notice, setNotice] = useState('')
 
@@ -299,6 +301,8 @@ export function TeacherAssignmentsPage() {
   const reloadAll = () => {
     assignments.reload()
     teachers.reload()
+    streams.reload()
+    subjects.reload()
   }
 
   const toggleStatus = async (item) => {
@@ -312,11 +316,90 @@ export function TeacherAssignmentsPage() {
     }
   }
 
-  const filteredTeachers = teacherList.filter((t) => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return (t.full_name || '').toLowerCase().includes(q) || (t.username || '').toLowerCase().includes(q)
-  })
+  // Combine teachers from /teachers/ and any assigned teachers from /academics/assignments/
+  const allTeachers = useMemo(() => {
+    const map = new Map()
+    teacherList.forEach((t) => {
+      const uid = String(t.user_id || t.id)
+      map.set(uid, {
+        id: t.id,
+        user_id: t.user_id || t.id,
+        full_name: t.full_name || t.username,
+        username: t.username,
+        phone: t.phone || '',
+      })
+    })
+    assignmentList.forEach((a) => {
+      const uid = String(a.teacher)
+      if (uid && !map.has(uid)) {
+        map.set(uid, {
+          id: uid,
+          user_id: Number(uid) || uid,
+          full_name: a.teacher_name || `Teacher #${uid}`,
+          username: `user_${uid}`,
+          phone: '',
+        })
+      }
+    })
+    return [...map.values()].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
+  }, [teacherList, assignmentList])
+
+  const isTeacherMatch = (a, t) => {
+    if (!a || !t) return false
+    const aTeacher = String(a.teacher ?? '')
+    const tUserId = String(t.user_id ?? '')
+    const tId = String(t.id ?? '')
+    if (aTeacher && tUserId && aTeacher === tUserId) return true
+    if (aTeacher && tId && aTeacher === tId) return true
+    if (a.teacher_name && t.full_name && a.teacher_name.trim().toLowerCase() === t.full_name.trim().toLowerCase()) return true
+    if (a.teacher_name && t.username && a.teacher_name.toLowerCase().includes(t.username.toLowerCase())) return true
+    return false
+  }
+
+  const isStreamMatch = (a, st) => {
+    if (!a || !st) return false
+    const aStream = String(a.stream ?? '')
+    const stId = String(st.id ?? '')
+    if (aStream && stId && aStream === stId) return true
+    if (a.stream_label && (st.label || st.name) && a.stream_label.trim().toLowerCase() === (st.label || st.name).trim().toLowerCase()) return true
+    return false
+  }
+
+  // Filtered master assignments
+  const filteredAssignments = useMemo(() => {
+    return assignmentList.filter((a) => {
+      if (search) {
+        const q = search.toLowerCase()
+        const match =
+          (a.teacher_name || '').toLowerCase().includes(q) ||
+          (a.stream_label || '').toLowerCase().includes(q) ||
+          (a.class_name || '').toLowerCase().includes(q) ||
+          (a.subject_name || '').toLowerCase().includes(q) ||
+          (a.subject_code || '').toLowerCase().includes(q) ||
+          (a.teacher_subject_code || '').toLowerCase().includes(q)
+        if (!match) return false
+      }
+      if (selectedStatus === 'active' && !a.is_active) return false
+      if (selectedStatus === 'ended' && a.is_active) return false
+      if (selectedTeacher && String(a.teacher) !== String(selectedTeacher)) return false
+      if (selectedSubject && String(a.subject) !== String(selectedSubject)) return false
+      if (selectedClass) {
+        const matchClass =
+          String(a.class_id) === String(selectedClass) ||
+          streamList.some((s) => String(s.id) === String(a.stream) && String(s.school_class) === String(selectedClass))
+        if (!matchClass) return false
+      }
+      return true
+    })
+  }, [assignmentList, search, selectedStatus, selectedTeacher, selectedSubject, selectedClass, streamList])
+
+  const filteredTeachers = useMemo(() => {
+    return allTeachers.filter((t) => {
+      if (!search) return true
+      const q = search.toLowerCase()
+      return (t.full_name || '').toLowerCase().includes(q) || (t.username || '').toLowerCase().includes(q)
+    })
+  }, [allTeachers, search])
 
   const saveAssignment = async (e) => {
     e.preventDefault()
@@ -333,17 +416,23 @@ export function TeacherAssignmentsPage() {
         setNotice('Teacher assigned successfully.')
       }
       setForm(null)
-      setModalTeacher(null)
       reloadAll()
     } catch (err) {
       setNotice(errorMessage(err))
     }
   }
 
+  const isLoading = assignments.loading || teachers.loading
+
   return (
     <div className="stack">
       <div className="panel-head">
-        <h2>Teacher Class & Subject Assignments</h2>
+        <div>
+          <h2>Teacher Class & Subject Assignments</h2>
+          <p className="muted" style={{ margin: '4px 0 0' }}>
+            Assign teachers to classes and subjects. Supports one teacher handling multiple subjects in one class and across many classes.
+          </p>
+        </div>
         <button
           className="btn primary"
           onClick={() => setForm({ paper_number: 1, is_active: true })}
@@ -352,14 +441,177 @@ export function TeacherAssignmentsPage() {
         </button>
       </div>
 
-      <p className="muted">
-        Assign teachers to Senior 1 through Senior 6 classes and subjects. Supports multiple teachers per class and multiple classes per teacher. Deactivating or ending an assignment safely revokes access without deleting past academic or attendance records.
-      </p>
+      {notice && (
+        <Alert kind={notice.includes('successfully') || notice.includes('updated') ? 'success' : 'error'}>
+          {notice}
+        </Alert>
+      )}
 
-      {notice && <Alert kind={notice.includes('successfully') || notice.includes('updated') ? 'success' : 'error'}>{notice}</Alert>}
+      <Tabs tabs={['All Assignments', 'By Teacher', 'By Class']} value={tab} onChange={setTab} />
 
-      <Tabs tabs={['By Teacher', 'By Class', 'All Assignments']} value={tab} onChange={setTab} />
+      {/* TAB 1: ALL ASSIGNMENTS MASTER TABLE */}
+      {tab === 'All Assignments' && (
+        <section className="panel">
+          <div className="row wrap" style={{ gap: 8, marginBottom: 16 }}>
+            <input
+              className="input"
+              style={{ minWidth: 220, flex: 1 }}
+              placeholder="Search by teacher, subject, class, code…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search teaching assignments"
+            />
+            <select
+              className="input"
+              style={{ width: 'auto' }}
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              aria-label="Filter by class"
+            >
+              <option value="">All Classes</option>
+              {classList.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <select
+              className="input"
+              style={{ width: 'auto' }}
+              value={selectedSubject}
+              onChange={(e) => setSelectedSubject(e.target.value)}
+              aria-label="Filter by subject"
+            >
+              <option value="">All Subjects</option>
+              {subjectList.map((s) => (
+                <option key={s.id} value={s.id}>{s.code} - {s.name}</option>
+              ))}
+            </select>
+            <select
+              className="input"
+              style={{ width: 'auto' }}
+              value={selectedTeacher}
+              onChange={(e) => setSelectedTeacher(e.target.value)}
+              aria-label="Filter by teacher"
+            >
+              <option value="">All Teachers</option>
+              {allTeachers.map((t) => (
+                <option key={t.id} value={t.user_id}>{t.full_name}</option>
+              ))}
+            </select>
+            <select
+              className="input"
+              style={{ width: 'auto' }}
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              aria-label="Filter by status"
+            >
+              <option value="all">All Statuses</option>
+              <option value="active">Active Only</option>
+              <option value="ended">Ended Only</option>
+            </select>
+            {(search || selectedClass || selectedSubject || selectedTeacher || selectedStatus !== 'all') && (
+              <button
+                type="button"
+                className="btn sm"
+                onClick={() => {
+                  setSearch('')
+                  setSelectedClass('')
+                  setSelectedSubject('')
+                  setSelectedTeacher('')
+                  setSelectedStatus('all')
+                }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
 
+          <div className="row spread" style={{ marginBottom: 12, fontSize: 13 }}>
+            <span className="muted">
+              Showing <b>{filteredAssignments.length}</b> of <b>{assignmentList.length}</b> assignments
+            </span>
+            <button
+              type="button"
+              className="btn sm ghost"
+              onClick={reloadAll}
+              title="Refresh assignments list"
+            >
+              ↻ Refresh
+            </button>
+          </div>
+
+          {isLoading ? (
+            <Skeleton rows={8} />
+          ) : assignments.error ? (
+            <ErrorState message={assignments.error} onRetry={reloadAll} />
+          ) : !filteredAssignments.length ? (
+            <Empty title="No assignments found">
+              {assignmentList.length === 0
+                ? 'No teaching assignments have been created yet. Click "+ Assign Teacher to Class" above to create one.'
+                : 'No assignments match the selected search or filter criteria.'}
+            </Empty>
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Teacher</th>
+                    <th>Class & Stream</th>
+                    <th>Subject</th>
+                    <th>Paper</th>
+                    <th>Subject Code</th>
+                    <th>Status</th>
+                    <th>Assigned On</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAssignments.map((a) => (
+                    <tr key={a.id} style={{ opacity: a.is_active ? 1 : 0.65 }}>
+                      <td>
+                        <b>{a.teacher_name || '—'}</b>
+                      </td>
+                      <td><b>{a.stream_label || a.class_name || '—'}</b></td>
+                      <td>{a.subject_name || '—'}</td>
+                      <td>Paper {a.paper_number || 1}</td>
+                      <td><code>{a.teacher_subject_code || a.subject_code || '—'}</code></td>
+                      <td>
+                        <span className={`badge ${a.is_active ? 'success' : 'danger'}`}>
+                          {a.is_active ? 'Active' : 'Ended'}
+                        </span>
+                      </td>
+                      <td>
+                        <small className="muted">{a.created_at ? fmtDate(a.created_at) : '—'}</small>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
+                          <button
+                            type="button"
+                            className="btn sm"
+                            onClick={() => setForm(a)}
+                            title="Edit assignment details"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn sm ${a.is_active ? 'danger' : 'success'}`}
+                            onClick={() => toggleStatus(a)}
+                            title={a.is_active ? 'End this assignment' : 'Reactivate this assignment'}
+                          >
+                            {a.is_active ? 'End' : 'Reactivate'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* TAB 2: GROUPED BY TEACHER */}
       {tab === 'By Teacher' && (
         <section className="panel">
           <div className="row spread" style={{ marginBottom: 16 }}>
@@ -375,14 +627,14 @@ export function TeacherAssignmentsPage() {
             </span>
           </div>
 
-          {teachers.loading ? (
+          {isLoading ? (
             <Skeleton rows={6} />
           ) : !filteredTeachers.length ? (
             <Empty title="No teachers found" />
           ) : (
             <div className="stack">
               {filteredTeachers.map((t) => {
-                const myAssigns = assignmentList.filter((a) => a.teacher === t.user_id)
+                const myAssigns = assignmentList.filter((a) => isTeacherMatch(a, t))
                 const activeCount = myAssigns.filter((a) => a.is_active).length
                 return (
                   <div
@@ -397,7 +649,7 @@ export function TeacherAssignmentsPage() {
                   >
                     <div className="row spread" style={{ alignItems: 'flex-start' }}>
                       <div>
-                        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+                        <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                           <b style={{ fontSize: 16 }}>{t.full_name}</b>
                           <code className="muted">@{t.username}</code>
                           <span className={`badge ${activeCount ? 'success' : 'muted'}`}>
@@ -407,6 +659,7 @@ export function TeacherAssignmentsPage() {
                         </div>
                       </div>
                       <button
+                        type="button"
                         className="btn sm"
                         onClick={() => setForm({ teacher: t.user_id, paper_number: 1, is_active: true })}
                       >
@@ -438,7 +691,7 @@ export function TeacherAssignmentsPage() {
                                 <td><b>{a.stream_label || '—'}</b></td>
                                 <td>{a.subject_name || '—'}</td>
                                 <td>Paper {a.paper_number || 1}</td>
-                                <td>{a.teacher_subject_code || '—'}</td>
+                                <td><code>{a.teacher_subject_code || '—'}</code></td>
                                 <td>
                                   <span className={`badge ${a.is_active ? 'success' : 'danger'}`}>
                                     {a.is_active ? 'Active' : 'Ended'}
@@ -450,6 +703,7 @@ export function TeacherAssignmentsPage() {
                                 <td style={{ textAlign: 'right' }}>
                                   <div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
                                     <button
+                                      type="button"
                                       className="btn sm"
                                       onClick={() => setForm(a)}
                                       title="Edit assignment details"
@@ -457,6 +711,7 @@ export function TeacherAssignmentsPage() {
                                       Edit
                                     </button>
                                     <button
+                                      type="button"
                                       className={`btn sm ${a.is_active ? 'danger' : 'success'}`}
                                       onClick={() => toggleStatus(a)}
                                       title={a.is_active ? 'End this assignment' : 'Reactivate this assignment'}
@@ -479,6 +734,7 @@ export function TeacherAssignmentsPage() {
         </section>
       )}
 
+      {/* TAB 3: GROUPED BY CLASS */}
       {tab === 'By Class' && (
         <section className="panel">
           <div className="row" style={{ marginBottom: 16 }}>
@@ -502,7 +758,7 @@ export function TeacherAssignmentsPage() {
             {streamList
               .filter((s) => !selectedClass || String(s.school_class) === String(selectedClass))
               .map((st) => {
-                const streamAssigns = assignmentList.filter((a) => a.stream === st.id)
+                const streamAssigns = assignmentList.filter((a) => isStreamMatch(a, st))
                 return (
                   <div
                     key={st.id}
@@ -523,6 +779,7 @@ export function TeacherAssignmentsPage() {
                         )}
                       </div>
                       <button
+                        type="button"
                         className="btn sm"
                         onClick={() => setForm({ stream: st.id, paper_number: 1, is_active: true })}
                       >
@@ -554,7 +811,7 @@ export function TeacherAssignmentsPage() {
                                 <td><b>{a.teacher_name || '—'}</b></td>
                                 <td>{a.subject_name || '—'}</td>
                                 <td>Paper {a.paper_number || 1}</td>
-                                <td>{a.teacher_subject_code || '—'}</td>
+                                <td><code>{a.teacher_subject_code || '—'}</code></td>
                                 <td>
                                   <span className={`badge ${a.is_active ? 'success' : 'danger'}`}>
                                     {a.is_active ? 'Active' : 'Ended'}
@@ -564,6 +821,15 @@ export function TeacherAssignmentsPage() {
                                 <td style={{ textAlign: 'right' }}>
                                   <div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
                                     <button
+                                      type="button"
+                                      className="btn sm"
+                                      onClick={() => setForm(a)}
+                                      title="Edit assignment details"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
                                       className={`btn sm ${a.is_active ? 'danger' : 'success'}`}
                                       onClick={() => toggleStatus(a)}
                                     >
@@ -584,10 +850,7 @@ export function TeacherAssignmentsPage() {
         </section>
       )}
 
-      {tab === 'All Assignments' && (
-        <ResourcePage cfg={R.assignments} embedded key="all-assignments-tab" />
-      )}
-
+      {/* ASSIGNMENT MODAL */}
       {form && (
         <Modal
           title={form.id ? 'Edit Teaching Assignment' : 'Assign Teacher to Class & Subject'}
@@ -604,7 +867,7 @@ export function TeacherAssignmentsPage() {
                   required
                 >
                   <option value="">Select teacher</option>
-                  {teacherList.map((t) => (
+                  {allTeachers.map((t) => (
                     <option key={t.id} value={t.user_id}>{t.full_name} (@{t.username})</option>
                   ))}
                 </select>

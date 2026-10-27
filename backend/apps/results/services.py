@@ -83,12 +83,19 @@ def _subject_rows(assessments, bands, exam_types, teacher_initials=None):
                 wtot += et.weight
 
         # Calculation rule:
-        # BOT (out of 20) contributes 20 of 80 marks for final year to give total of 100 (BOT + EOT = 100).
-        # Mid-Term marks out of 20 converted to C2 is printed in report card but NOT calculated in final term results.
-        if bot_score is not None or eot_score is not None:
+        # BOT is completely EXCLUDED from final score calculations.
+        # Mid-Term replaces BOT: Teachers enter only Mid-Term (out of 20 marks),
+        # then the system calculates C1, AVG, IDENT, DESCRIPTOR, GRADE, EOT as before with BOT.
+        # final_score = Mid_value (out of 20) + eot_value (out of 80) = 100.
+        ca_score = mid_score if mid_score is not None else None
+        if ca_score is None and bot_score is not None:
+            # Safe fallback if only legacy BOT score exists
+            ca_score = bot_score
+
+        if ca_score is not None or eot_score is not None:
             tot = Decimal(0)
-            if bot_score is not None:
-                tot += Decimal(str(round(float(bot_score), 2)))
+            if ca_score is not None:
+                tot += Decimal(str(round(float(ca_score), 2)))
             if eot_score is not None:
                 tot += Decimal(str(round(float(eot_score), 2)))
             total = tot.quantize(Q2, ROUND_HALF_UP)
@@ -97,8 +104,23 @@ def _subject_rows(assessments, bands, exam_types, teacher_initials=None):
             total = total.quantize(Q2, ROUND_HALF_UP)
 
         grade, remark = grade_for(total, bands)
-        c1 = round((float(bot_score) / 20.0) * 3.0, 1) if bot_score is not None else None
-        c2 = round((float(mid_score) / 20.0) * 3.0, 1) if mid_score is not None else None
+        c1 = round((float(ca_score) / 20.0) * 3.0, 1) if ca_score is not None else None
+        c2 = c1
+        avg = c1
+        ident = None
+        descriptor = ""
+        if avg is not None:
+            r_avg = round(float(avg))
+            if r_avg <= 1:
+                ident = 1
+                descriptor = "BASIC"
+            elif r_avg == 2:
+                ident = 2
+                descriptor = "MODERATE"
+            else:
+                ident = 3
+                descriptor = "OUTSTANDING"
+
         initials = (teacher_initials or {}).get(sid, "")
         rows.append({
             "subject_id": sid,
@@ -106,8 +128,13 @@ def _subject_rows(assessments, bands, exam_types, teacher_initials=None):
             "code": names[sid][1],
             "components": parts,
             "raw_components": raw_parts,
+            "mid_score": float(ca_score) if ca_score is not None else None,
+            "eot_score": float(eot_score) if eot_score is not None else None,
             "c1": c1,
             "c2": c2,
+            "avg": avg,
+            "ident": ident,
+            "descriptor": descriptor,
             "total": total,
             "grade": grade,
             "remark": remark,

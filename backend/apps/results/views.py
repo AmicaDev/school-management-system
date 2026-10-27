@@ -195,6 +195,9 @@ def grid(request):
         rows.append({"student": s.id, "name": s.full_name, "index_no": s.index_no, "cells": cells,
                      "c1": sub[0].get("c1") if sub else None,
                      "c2": sub[0].get("c2") if sub else None,
+                     "avg": sub[0].get("avg") if sub else None,
+                     "ident": sub[0].get("ident") if sub else None,
+                     "descriptor": sub[0].get("descriptor") if sub else "",
                      "total": sub[0]["total"] if sub else None, "grade": sub[0]["grade"] if sub else "",
                      "remark": sub[0]["remark"] if sub else ""})
     exam_types_data = []

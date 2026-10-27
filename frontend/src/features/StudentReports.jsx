@@ -196,22 +196,21 @@ export function SingleReportCard({ student, school }) {
           </tbody>
         </table>
       ) : (
-        /* O-Level Template matching the reference image:
-           SUBJECT | Mid-term | C1 | AVG | IDENT | DESCRIPTOR | BOT | 80% | 100% | GRADE | REMARK | TEACHER'S INITIALS */
+        /* O-Level Template matching the reference format:
+           SUBJECT | Mid-term (20) | C1 | AVG | IDENT | DESCRIPTOR | 80% | 100% | GRADE | REMARK | TEACHER'S INITIALS */
         <table className="rc-table">
           <thead>
             <tr>
-              <th style={{ width: '22%', textAlign: 'left' }}>SUBJECT</th>
-              <th style={{ width: '7%' }}>Mid-term</th>
-              <th style={{ width: '6.5%' }}>C1</th>
-              <th style={{ width: '6.5%' }}>AVG</th>
-              <th style={{ width: '6.5%' }}>IDENT</th>
-              <th style={{ width: '15%' }}>DESCRIPTOR</th>
-              <th style={{ width: '6.5%' }}>BOT</th>
-              <th style={{ width: '7%' }}>80%</th>
-              <th style={{ width: '7.5%' }}>100%</th>
+              <th style={{ width: '23%', textAlign: 'left' }}>SUBJECT</th>
+              <th style={{ width: '8%' }}>Mid-term</th>
+              <th style={{ width: '7%' }}>C1</th>
+              <th style={{ width: '7%' }}>AVG</th>
+              <th style={{ width: '7%' }}>IDENT</th>
+              <th style={{ width: '16%' }}>DESCRIPTOR</th>
+              <th style={{ width: '8%' }}>80%</th>
+              <th style={{ width: '8%' }}>100%</th>
               <th style={{ width: '7%' }}>GRADE</th>
-              <th style={{ width: '10.5%' }}>REMARK</th>
+              <th style={{ width: '11%' }}>REMARK</th>
               <th style={{ width: '8%' }}>TEACHER'S<br />INITIALS</th>
             </tr>
           </thead>
@@ -222,20 +221,20 @@ export function SingleReportCard({ student, school }) {
               const rows = subjects.length ? subjects.map((sub, i) => {
                 const rawComps = sub.raw_components || {}
                 const comps = sub.components || {}
-                // 20% column: Mid-Term marks entered out of 20
-                const botVal = compVal([rawComps, comps], 'BOT', 'BEGINNING_OF_TERM', 'B_O_T')
+                // Continuous assessment score: Mid-Term marks entered out of 20 (BOT excluded)
                 const midVal = compVal([rawComps, comps], 'MID', 'MIDTERM', 'MID_TERM', 'M_T', 'MID-TERM')
-                const col20 = midVal != null ? midVal : null
+                const botVal = compVal([rawComps, comps], 'BOT', 'BEGINNING_OF_TERM', 'B_O_T')
+                const col20 = midVal != null ? midVal : (sub.mid_score != null ? sub.mid_score : (botVal != null ? botVal : null))
 
                 // 80% column: End of term examination (out of 80)
                 const eotVal = compVal([rawComps, comps], 'FINAL', 'EOT', 'END_OF_TERM', 'END', 'E_O_T')
 
                 // 100% column: Mid-Term (out of 20) + End of term (out of 80) = FINAL RESULTS out of 100
-                // BOT is optional and does NOT contribute to the final term results (excluded from 100%)
-                // sub.total from backend includes BOT, so we compute Mid-term + EOT directly here.
-                const final100 = col20 != null && eotVal != null
-                  ? (col20 + eotVal)
-                  : (eotVal != null ? eotVal : (col20 != null ? col20 : null))
+                // BOT is completely excluded from the 100% final score
+                const col80 = eotVal != null ? eotVal : (sub.eot_score != null ? sub.eot_score : null)
+                const final100 = col20 != null && col80 != null
+                  ? (col20 + col80)
+                  : (col80 != null ? col80 : (col20 != null ? col20 : (sub.total != null ? Number(sub.total) : null)))
 
                 // C1 calculated as ((marks obtained/20)*3)
                 const c1Raw = sub.c1 != null
@@ -243,14 +242,8 @@ export function SingleReportCard({ student, school }) {
                   : (col20 != null ? (col20 / 20.0) * 3.0 : (comps['C1'] != null ? Number(comps['C1']) : null))
                 const c1 = c1Raw != null ? Number(c1Raw.toFixed(1)) : null
 
-                // C2: BOT marks out of 20 converted to C2
-                const c2Raw = sub.c2 != null
-                  ? Number(sub.c2)
-                  : (botVal != null ? (botVal / 20.0) * 3.0 : null)
-                const c2 = c2Raw != null ? Number(c2Raw.toFixed(1)) : null
-
-                // AVG: Continuous assessment average between C1 and C2
-                const avgRaw = (c1 != null && c2 != null) ? (c1 + c2) / 2.0 : (c1 != null ? c1 : c2)
+                // AVG: Continuous assessment score (C1 from Mid-Term out of 20)
+                const avgRaw = sub.avg != null ? Number(sub.avg) : c1
                 const avg = avgRaw != null ? Number(avgRaw.toFixed(1)) : null
                 if (avg != null) avgList.push(avg)
 
@@ -274,8 +267,7 @@ export function SingleReportCard({ student, school }) {
                     <td>{avg != null ? avg : ''}</td>
                     <td><b>{subIdInfo.ident !== '—' ? subIdInfo.ident : ''}</b></td>
                     <td style={{ fontSize: '9px', textAlign: 'center', fontWeight: 600 }}>{subIdInfo.desc !== '—' ? subIdInfo.desc : ''}</td>
-                    <td>{c2 != null ? c2 : ''}</td>
-                    <td>{eotVal != null ? eotVal : ''}</td>
+                    <td>{col80 != null ? col80 : ''}</td>
                     <td><b>{final100 != null ? `${final100}` : ''}</b></td>
                     <td><b>{finalGrade}</b></td>
                     <td>{finalRemark}</td>
@@ -283,7 +275,7 @@ export function SingleReportCard({ student, school }) {
                   </tr>
                 )
               }) : (
-                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 12 }}>No assessment marks recorded for this term.</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 12 }}>No assessment marks recorded for this term.</td></tr>
               )
 
               const overallAvgVal = report.average != null
@@ -298,7 +290,6 @@ export function SingleReportCard({ student, school }) {
                     <td></td>
                     <td></td>
                     <td style={{ fontWeight: 700 }}>{overallAvgVal}</td>
-                    <td></td>
                     <td></td>
                     <td></td>
                     <td></td>

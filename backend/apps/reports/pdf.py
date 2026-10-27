@@ -245,21 +245,20 @@ def build_report_card(student, term):
         by_subject_ass.setdefault(a.subject_id, []).append(a)
 
     if not is_a_level:
-        # O-Level columns matching the reference image:
-        # SUBJECT | 20% | C1 | AVG | IDENT | DESCRIPTOR | C2 | 80% | 100% | GRADE | REMARK | TEACHER'S INITIALS
+        # O-Level columns matching the reference format:
+        # SUBJECT | 20% | C1 | AVG | IDENT | DESCRIPTOR | 80% | 100% | GRADE | REMARK | TEACHER'S INITIALS
         col_w = [
-            42 * mm,
-            11 * mm,
+            44 * mm,
+            12 * mm,
             11 * mm,
             12 * mm,
             11 * mm,
-            24 * mm,
-            11 * mm,
-            11 * mm,
+            26 * mm,
             12 * mm,
-            12 * mm,
-            18 * mm,
+            14 * mm,
             13 * mm,
+            19 * mm,
+            14 * mm,
         ]
         headers = [
             Paragraph("<b>SUBJECT</b>", cell_bold),
@@ -268,7 +267,6 @@ def build_report_card(student, term):
             Paragraph("<b>AVG</b>", cell_center_bold),
             Paragraph("<b>IDENT</b>", cell_center_bold),
             Paragraph("<b>DESCRIPTOR</b>", cell_center_bold),
-            Paragraph("<b>C2</b>", cell_center_bold),
             Paragraph("<b>80%</b>", cell_center_bold),
             Paragraph("<b>100%</b>", cell_center_bold),
             Paragraph("<b>GRADE</b>", cell_center_bold),
@@ -284,14 +282,15 @@ def build_report_card(student, term):
             sid = r["subject_id"]
             ass_items = by_subject_ass.get(sid, [])
 
-            bot_ass = next((a for a in ass_items if a.exam_type.code.upper() in ("BOT", "BEGINNING_OF_TERM", "B_O_T")), None)
             mid_ass = next((a for a in ass_items if a.exam_type.code.upper() in ("MID", "MIDTERM", "MID_TERM", "M_T")), None)
+            bot_ass = next((a for a in ass_items if a.exam_type.code.upper() in ("BOT", "BEGINNING_OF_TERM", "B_O_T")), None)
             final_ass = next((a for a in ass_items if a.exam_type.code.upper() in ("FINAL", "EOT", "END", "END_OF_TERM", "E_O_T")), None)
             c1_ass = next((a for a in ass_items if a.exam_type.code.upper() in ("C1", "COMPETENCY1", "COMPETENCY_1")), None)
 
-            # 20% Column: BOT marks out of 20
-            if bot_ass:
-                col_20_val = float(bot_ass.score)
+            # 20% Column: Mid-Term marks out of 20 (BOT excluded; fallback if only legacy BOT exists)
+            active_ca = mid_ass if mid_ass else (bot_ass if bot_ass else None)
+            if active_ca:
+                col_20_val = float(active_ca.score)
                 col_20_str = f"{col_20_val:g}"
                 c1_num = round((col_20_val / 20.0) * 3.0, 1)
             elif c1_ass:
@@ -303,22 +302,8 @@ def build_report_card(student, term):
                 col_20_str = ""
                 c1_num = None
 
-            # Mid-Term marks out of 20 converted to C2: ((mid_ass.score / 20) * 3)
-            # Printed in report card but NOT calculated in the final term results
-            if mid_ass:
-                c2_num = round((float(mid_ass.score) / 20.0) * 3.0, 1)
-            else:
-                c2_num = None
-
-            # AVG: Continuous assessment average between C1 and C2
-            if c1_num is not None and c2_num is not None:
-                avg_num = round((c1_num + c2_num) / 2.0, 1)
-            elif c1_num is not None:
-                avg_num = c1_num
-            elif c2_num is not None:
-                avg_num = c2_num
-            else:
-                avg_num = None
+            # AVG: Continuous assessment score (C1 from Mid-Term out of 20 scaled to 3.0)
+            avg_num = c1_num
 
             # 80% Column: End of term examination (out of 80)
             if final_ass:
@@ -328,8 +313,8 @@ def build_report_card(student, term):
                 col_80_val = None
                 col_80_str = ""
 
-            # 100% Final Results: BOT (out of 20) + End of term (out of 80) = FINAL RESULTS out of 100
-            # Mid-Term is NOT included in this total
+            # 100% Final Results: Mid-Term (out of 20) + End of term (out of 80) = FINAL RESULTS out of 100
+            # BOT is excluded from total
             if col_20_val is not None and col_80_val is not None:
                 tot_num = round(col_20_val + col_80_val, 1)
             elif col_80_val is not None:
@@ -369,7 +354,6 @@ def build_report_card(student, term):
                 Paragraph(f"{avg_num:g}" if avg_num is not None else "", cell_center),
                 Paragraph(str(ident), cell_center_bold),
                 Paragraph(desc, cell_center),
-                Paragraph(f"{c2_num:g}" if c2_num is not None else "", cell_center),
                 Paragraph(col_80_str, cell_center),
                 Paragraph(tot_str, cell_center_bold),
                 Paragraph(grade, cell_center_bold),
@@ -392,7 +376,6 @@ def build_report_card(student, term):
             Paragraph("", cell_style),
             Paragraph("", cell_style),
             Paragraph(f"<b>{overall_avg:g}</b>", cell_center_bold),
-            Paragraph("", cell_style),
             Paragraph("", cell_style),
             Paragraph("", cell_style),
             Paragraph("", cell_style),
