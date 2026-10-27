@@ -38,13 +38,17 @@ def _a_level_points(grade):
     return pts.get(str(grade).strip().upper(), 0)
 
 
-def build_report_card(student, term):
+def build_report_card(student, term, is_mid_term=False):
     profile, summary = SchoolProfile.get(), term_summary(student, term)
     comment = ReportComment.objects.filter(student=student, term=term).first()
 
     class_name = student.stream.school_class.name if student.stream and student.stream.school_class else ""
     stream_name = student.stream.name if student.stream else ""
     is_a_level = bool(re.search(r"\b(?:s\.?[56]|senior\s*(?:5|6|five|six)|a[\s\-_]?level)\b", class_name, re.I))
+    is_mt = bool(is_mid_term or getattr(term, "is_mid_term", False) or ("MID" in getattr(term, "name", "").upper()))
+    # Mid-Term: warm, soft light gold with a slight yellow-amber tint (#FAF0D7)
+    # End Of Term: vivid, bright neon green (or lime green) (#39FF14)
+    page_bg_color = colors.HexColor("#FAF0D7") if is_mt else colors.HexColor("#39FF14")
 
     # Look up teacher initials per subject
     teacher_initials = {}
@@ -671,21 +675,11 @@ def build_report_card(student, term):
 
     def draw_page_decorations(canvas, _doc):
         canvas.saveState()
-        # 1. Background Watermark (Crest)
-        if logo_file_path and os.path.exists(logo_file_path):
-            try:
-                canvas.setFillAlpha(0.08)
-                canvas.drawImage(
-                    str(logo_file_path),
-                    52.5 * mm,
-                    96 * mm,
-                    105 * mm,
-                    105 * mm,
-                    mask="auto",
-                    preserveAspectRatio=True,
-                )
-            except Exception:
-                pass
+        # 1. Page background fill
+        # Mid-Term: warm, soft light gold with slight yellow-amber tint (#FAF0D7)
+        # End Of Term: vivid, bright neon green (#39FF14)
+        canvas.setFillColor(page_bg_color)
+        canvas.rect(0, 0, 210 * mm, 297 * mm, fill=1, stroke=0)
 
         # 2. Outer double blue frame matching the reference design
         border_color = colors.HexColor("#104a8e")
