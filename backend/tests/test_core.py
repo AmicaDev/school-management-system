@@ -767,6 +767,17 @@ class ResultsTests(Base):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(b"".join(r.streaming_content)[:4], b"%PDF")
 
+    def test_a_level_report_card_pdf(self):
+        from apps.academics.models import SchoolClass, Stream
+        a_class = SchoolClass.objects.create(name="Senior Five", order=5)
+        a_stream = Stream.objects.create(school_class=a_class, name="Arts")
+        self.s1.stream = a_stream
+        self.s1.save()
+        self.login("p1")
+        r = self.client.get(f"/api/v1/reports/report-card/{self.s1.id}/{self.term.id}/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(b"".join(r.streaming_content)[:4], b"%PDF")
+
 
 class CommsTests(Base):
     def test_enquiry_flow_and_notifications(self):

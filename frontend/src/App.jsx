@@ -105,16 +105,10 @@ export default function App() {
           <Route path="/admin/enquiries" element={<S.Enquiries />} /><Route path="/admin/analytics" element={<A.AdminDashboard view="analytics" />} />
           <Route path="/admin/finance" element={<F.FinanceOverview />} />
           <Route path="/admin/bursars" element={<A.BursarManagementPage />} />
-          <Route path="/admin/finance/payments/new" element={<F.RecordPaymentPage />} />
-          <Route path="/admin/finance/accounts" element={<F.StudentAccountsPage />} />
-          <Route path="/admin/finance/receipts" element={<F.ReceiptsHistoryPage />} />
-          <Route path="/admin/finance/structures" element={<F.FeeStructuresPage />} />
-          <Route path="/admin/finance/expenses" element={<F.ExpensesPage />} />
-          <Route path="/admin/finance/reports" element={<F.FinancialReportsPage />} />
           <Route path="/admin/settings" element={<A.SchoolSettings />} /><Route path="/admin/users" element={rp(R.users)} /><Route path="/admin/audit" element={rp(R.audit)} />
         </Route></Route>
 
-        <Route element={<RequireRole roles={['BURSAR', 'ADMIN']} />}><Route element={<Shell />}>
+        <Route element={<RequireRole roles={['BURSAR']} />}><Route element={<Shell />}>
           <Route path="/bursar" element={<B.BursarDashboard />} />
           <Route path="/bursar/payments/new" element={<F.RecordPaymentPage />} />
           <Route path="/bursar/accounts" element={<F.StudentAccountsPage />} />

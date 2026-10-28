@@ -94,7 +94,7 @@ export function Login() {
         : await login(f.username.trim(), f.password)
 
       if (isBursar) {
-        if (u.role === 'BURSAR' || u.role === 'ADMIN') {
+        if (u.role === 'BURSAR') {
           nav('/bursar', { replace: true })
           return
         }

@@ -20,11 +20,11 @@ export default function BursarLogin() {
     setErr('')
     try {
       const user = await login(f.username, f.password)
-      if (user.role === 'BURSAR' || user.role === 'ADMIN') {
+      if (user.role === 'BURSAR') {
         nav('/bursar', { replace: true })
       } else {
         await logout()
-        setErr('Access restricted: This portal is reserved for Bursars and authorized Finance personnel.')
+        setErr('Access restricted: This portal is reserved strictly for Bursars.')
       }
     } catch (e) {
       setErr(errorMessage(e))

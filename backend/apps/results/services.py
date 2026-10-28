@@ -81,7 +81,14 @@ def grade_for(mark, bands=None):
                 return b.grade, b.remark
     # Fallback to standard official grading scale:
     # 80-100: A (EXCELLENT), 70-79: B (VERY GOOD), 60-69: C (GOOD), 50-59: D (FAIR), 0-49: E (POOR)
-    val = float(m)
+    return _grade_and_remark(m)
+
+
+def _grade_and_remark(score):
+    try:
+        val = float(score)
+    except (ValueError, TypeError):
+        return "-", ""
     if val >= 80:
         return "A", "EXCELLENT"
     if val >= 70:
@@ -93,7 +100,7 @@ def grade_for(mark, bands=None):
     return "E", "POOR"
 
 
-def _subject_rows(assessments, bands, exam_types, teacher_initials=None):
+def _subject_rows(assessments, bands, exam_types, teacher_initials=None, is_a_level=False):
     by_subject = defaultdict(lambda: defaultdict(list))
     names = {}
     for a in assessments:
@@ -160,6 +167,18 @@ def _subject_rows(assessments, bands, exam_types, teacher_initials=None):
             wsum += pct * weight
             wtot += weight
 
+        # Collect papers for this subject
+        papers = {}
+        for et_id, ass_list in per_type.items():
+            et = all_et_map.get(et_id)
+            is_end = _is_eot(et)
+            for a in ass_list:
+                p_num = getattr(a, "paper_number", None)
+                if p_num is not None:
+                    p_int = int(p_num)
+                    if p_int not in papers or is_end:
+                        papers[p_int] = float(a.score)
+
         # Calculation rule:
         # BOT is completely EXCLUDED from final score calculations.
         # Mid-Term replaces BOT: Teachers enter only Mid-Term (out of 20 marks),
@@ -170,18 +189,34 @@ def _subject_rows(assessments, bands, exam_types, teacher_initials=None):
             # Safe fallback if only legacy BOT score exists
             ca_score = bot_score
 
-        if ca_score is not None or eot_score is not None:
-            tot = Decimal(0)
-            if ca_score is not None:
-                tot += Decimal(str(round(float(ca_score), 2)))
-            if eot_score is not None:
-                tot += Decimal(str(round(float(eot_score), 2)))
-            total = tot.quantize(Q2, ROUND_HALF_UP)
+        if is_a_level:
+            rec_scores = [float(score) for p_num, score in sorted(papers.items()) if score is not None]
+            if rec_scores:
+                avg_sc = Decimal(str(round(sum(rec_scores) / len(rec_scores), 2)))
+                total = avg_sc.quantize(Q2, ROUND_HALF_UP)
+            elif ca_score is not None or eot_score is not None:
+                tot = Decimal(0)
+                if ca_score is not None:
+                    tot += Decimal(str(round(float(ca_score), 2)))
+                if eot_score is not None:
+                    tot += Decimal(str(round(float(eot_score), 2)))
+                total = tot.quantize(Q2, ROUND_HALF_UP)
+            else:
+                total = (wsum / wtot).quantize(Q2, ROUND_HALF_UP) if wtot else Decimal(0)
+            grade, remark = _grade_and_remark(float(total))
         else:
-            total = (wsum / wtot) if wtot else Decimal(0)
-            total = total.quantize(Q2, ROUND_HALF_UP)
+            if ca_score is not None or eot_score is not None:
+                tot = Decimal(0)
+                if ca_score is not None:
+                    tot += Decimal(str(round(float(ca_score), 2)))
+                if eot_score is not None:
+                    tot += Decimal(str(round(float(eot_score), 2)))
+                total = tot.quantize(Q2, ROUND_HALF_UP)
+            else:
+                total = (wsum / wtot) if wtot else Decimal(0)
+                total = total.quantize(Q2, ROUND_HALF_UP)
+            grade, remark = grade_for(total, bands)
 
-        grade, remark = grade_for(total, bands)
         c1 = round((float(ca_score) / 20.0) * 3.0, 1) if ca_score is not None else None
         c2 = c1
         avg = c1
@@ -206,6 +241,7 @@ def _subject_rows(assessments, bands, exam_types, teacher_initials=None):
             "code": names[sid][1],
             "components": parts,
             "raw_components": raw_parts,
+            "papers": papers,
             "mid_score": float(ca_score) if ca_score is not None else None,
             "eot_score": float(eot_score) if eot_score is not None else None,
             "c1": c1,
@@ -233,9 +269,14 @@ def term_summary(student, term):
             ln = ta.teacher.last_name[:1] if ta.teacher.last_name else ""
             inits = (fn + ln).upper() or ta.teacher.username[:2].upper()
             teacher_initials[ta.subject_id] = inits
-    rows = _subject_rows(qs, bands, ets, teacher_initials=teacher_initials)
+    class_name = student.stream.school_class.name if student.stream and student.stream.school_class else ""
+    is_a_level = bool(re.search(r"\b(?:s\.?[56]|senior\s*(?:5|6|five|six)|a[\s\-_]?level)\b", class_name, re.I))
+    rows = _subject_rows(qs, bands, ets, teacher_initials=teacher_initials, is_a_level=is_a_level)
     average = (sum(r["total"] for r in rows) / len(rows)).quantize(Q2, ROUND_HALF_UP) if rows else Decimal(0)
-    grade, remark = grade_for(average, bands)
+    if is_a_level:
+        grade, remark = _grade_and_remark(float(average))
+    else:
+        grade, remark = grade_for(average, bands)
     return {"subjects": rows, "total": sum((r["total"] for r in rows), Decimal(0)), "average": average, "grade": grade,
             "remark": remark, "exam_types": [{"code": e.code, "name": e.name} for e in ets],
             "position": class_position(student, term, average)}

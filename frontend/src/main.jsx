@@ -32,7 +32,7 @@ function Splash() {
 function AppBoot() {
   const [ready, setReady] = useState(false)
   useEffect(() => {
-    const t = setTimeout(() => setReady(true), 10000)
+    const t = setTimeout(() => setReady(true), 3000)
     return () => clearTimeout(t)
   }, [])
   return (

@@ -83,10 +83,196 @@ const compVal = (objs, ...cands) => {
   return null
 }
 
+export function ALevelReportCard({ student, school, isMidTerm = false }) {
+  const report = student.report || {}
+  const subjects = report.subjects || []
+  const logoSrc = '/kiyingi_logo.png'
+  const combSubjects = subjects.slice(0, 5)
+
+  return (
+    <article className="report-card-print-page a-level-report-card">
+      {/* Top Header matching reference image */}
+      <div className="al-header">
+        <div className="al-logo-wrap">
+          <img
+            src={logoSrc}
+            alt="School Crest"
+            className="al-logo"
+            onError={(e) => { e.target.style.display = 'none' }}
+          />
+        </div>
+        <div className="al-title-area">
+          <h2 className="al-school-name">{school?.name || 'KIYINGI MEMORIAL SECONDARY SCHOOL'}</h2>
+          <div className="al-school-location">3KM ALONG WABUSAANA-KYAMBOGO ROAD FROM KAKOOGE TOWNSHIP</div>
+          <div className="al-school-meta">
+            <span>P.O.BOX KAMPALA UGANDA</span>
+            <span className="al-school-phone">TEL:0772511555/0701511555</span>
+          </div>
+          <div className="al-motto">**Search for wisdom**</div>
+        </div>
+      </div>
+
+      {/* Card Term Title */}
+      <div className="al-term-title">
+        <u>
+          {isMidTerm
+            ? `MID-TERM A'LEVEL REPORT CARD ${(report.term_name || 'THREE').toUpperCase()} ${report.year_name || '2026'}`
+            : `END OF TERM ${(report.term_name || 'THREE').toUpperCase()} A'LEVEL REPORT CARD ${report.year_name || '2026'}`}
+        </u>
+      </div>
+
+      {/* Student Details */}
+      <div className="al-student-bio">
+        <div><b>NAME:</b> &nbsp;{student.name?.toUpperCase()}</div>
+        <div><b>CLASS:</b> &nbsp;{(report.class_name || student.stream_label || 'SENIOR FIVE').toUpperCase()}</div>
+      </div>
+
+      {/* Performance Records Title */}
+      <div className="al-section-heading">PERFORMANCE RECORDS</div>
+
+      {/* Performance Records Table */}
+      <table className="al-table">
+        <thead>
+          <tr>
+            <th rowSpan="2" style={{ width: '31%', textAlign: 'left' }}>SUBJECT</th>
+            <th colSpan="3" style={{ width: '27%' }}>SCORES</th>
+            <th rowSpan="2" style={{ width: '13%' }}>GRADE</th>
+            <th rowSpan="2" style={{ width: '17%' }}>COMMENT</th>
+            <th rowSpan="2" style={{ width: '12%' }}>INITIALS</th>
+          </tr>
+          <tr>
+            <th style={{ width: '9%' }}>PP1</th>
+            <th style={{ width: '9%' }}>PP2</th>
+            <th style={{ width: '9%' }}>PP3</th>
+          </tr>
+        </thead>
+        <tbody>
+          {subjects.length ? subjects.map((sub, i) => {
+            const papersObj = sub.papers || {}
+            const allComps = { ...(sub.raw_components || {}), ...(sub.components || {}) }
+
+            const getPaper = (n) => {
+              if (papersObj[n] != null) return Number(papersObj[n])
+              if (papersObj[String(n)] != null) return Number(papersObj[String(n)])
+              const targets = [`PP${n}`, `P${n}`, `PAPER${n}`, `PAPER_${n}`, `PAPER ${n}`, `PP_${n}`]
+              for (const [k, v] of Object.entries(allComps)) {
+                const clean = k.toUpperCase().replace(/[^A-Z0-9]/g, '')
+                if (targets.some((t) => t.replace(/[^A-Z0-9]/g, '') === clean)) {
+                  const num = Number(v)
+                  if (!isNaN(num)) return num
+                }
+              }
+              return null
+            }
+
+            let pp1 = getPaper(1)
+            let pp2 = getPaper(2)
+            let pp3 = getPaper(3)
+
+            if (pp1 == null && pp2 == null && pp3 == null) {
+              if (sub.total != null && !isNaN(Number(sub.total))) {
+                pp1 = Number(sub.total)
+              } else if (sub.eot_score != null) {
+                pp1 = Number(sub.eot_score)
+              } else if (sub.mid_score != null) {
+                pp1 = Number(sub.mid_score)
+              }
+            }
+
+            const recScores = [pp1, pp2, pp3].filter((val) => val != null && !isNaN(val))
+            // (GRADE = PP1 + PP2 + PP3 / number of papers its marks recorded)
+            const avgScore = recScores.length > 0
+              ? Math.round(recScores.reduce((a, b) => a + b, 0) / recScores.length)
+              : null
+
+            // NOTE: Grading scale uses O level grading scale (A, B, C, D, E)
+            const grade = avgScore != null ? gradePreview(avgScore) : (sub.grade || '')
+            const comment = grade ? remarkPreview(grade) : (sub.remark || '')
+            const initials = sub.teacher_initials || sub.initials || 'KM'
+
+            return (
+              <tr key={sub.subject_id || i}>
+                <td className="al-sub-name">{sub.subject?.toUpperCase()}</td>
+                <td className="al-center">{pp1 != null ? pp1 : ''}</td>
+                <td className="al-center">{pp2 != null ? pp2 : ''}</td>
+                <td className="al-center">{pp3 != null ? pp3 : ''}</td>
+                <td className="al-center" style={{ fontWeight: 800 }}>{grade}</td>
+                <td className="al-center" style={{ fontWeight: 600 }}>{comment}</td>
+                <td className="al-center">{initials}</td>
+              </tr>
+            )
+          }) : (
+            <tr><td colSpan="7" style={{ textAlign: 'center', padding: 12 }}>No assessment marks recorded for this term.</td></tr>
+          )}
+        </tbody>
+      </table>
+
+      {/* Subject Combination Box */}
+      <div className="al-comb-heading">SUBJECT COMBINATION</div>
+      <table className="al-comb-table">
+        <tbody>
+          <tr>
+            <td style={{ width: '23%' }}></td>
+            {[0, 1, 2, 3, 4].map((idx) => (
+              <td key={idx} style={{ width: '15.4%', textAlign: 'center', fontWeight: 700 }}>
+                {combSubjects[idx]?.code || combSubjects[idx]?.subject?.slice(0, 5).toUpperCase() || ''}
+              </td>
+            ))}
+          </tr>
+          <tr>
+            <td style={{ width: '23%', fontWeight: 800 }}>POINTS</td>
+            {[0, 1, 2, 3, 4].map((idx) => {
+              const sub = combSubjects[idx]
+              let pts = ''
+              if (sub) {
+                const rec = [sub.papers?.[1], sub.papers?.[2], sub.papers?.[3]].filter((v) => v != null && !isNaN(v))
+                const avg = rec.length ? rec.reduce((a, b) => a + Number(b), 0) / rec.length : (sub.total != null ? Number(sub.total) : null)
+                const g = avg != null ? gradePreview(avg) : sub.grade
+                pts = g === 'A' ? 6 : g === 'B' ? 5 : g === 'C' ? 4 : g === 'D' ? 3 : g === 'E' ? 2 : ''
+              }
+              return (
+                <td key={idx} style={{ width: '15.4%', textAlign: 'center', fontWeight: 800 }}>
+                  {pts}
+                </td>
+              )
+            })}
+          </tr>
+        </tbody>
+      </table>
+
+      {/* Remarks & Signatures with Dotted Lines */}
+      <div className="al-remarks-area">
+        <div className="al-remark-line">
+          <b>CLASS TEACHER'S REMARKS:</b> &nbsp;
+          <span>{report.teacher_comment || ''}</span>
+          <span className="al-dots"></span>
+        </div>
+        <div className="al-sign-line">
+          <b>SIGN:</b>
+          <span className="al-dots"></span>
+        </div>
+        <div className="al-remark-line" style={{ marginTop: 4 }}>
+          <b>HEADTEACHER'S REMARKS:</b> &nbsp;
+          <span>{report.head_comment || ''}</span>
+          <span className="al-dots"></span>
+        </div>
+        <div className="al-sign-line">
+          <b>SIGN:</b>
+          <span className="al-dots"></span>
+        </div>
+      </div>
+    </article>
+  )
+}
+
 export function SingleReportCard({ student, school }) {
   const report = student.report || {}
   const subjects = report.subjects || []
   const isALevel = /s\.?[56]|senior\s*[56]/i.test(report.class_name || student.stream_label || '')
+  if (isALevel) {
+    return <ALevelReportCard student={student} school={school} isMidTerm={false} />
+  }
+
   const logoSrc = '/kiyingi_logo.png'
   const studentPhoto = student.photo ? mediaUrl(student.photo) : null
 
@@ -539,8 +725,12 @@ export function SingleReportCard({ student, school }) {
    ===================================================================== */
 export function MidTermReportCard({ student, school }) {
   const report = student.report || {}
-  const subjects = report.subjects || []
   const isALevel = /s\.?[56]|senior\s*[56]/i.test(report.class_name || student.stream_label || '')
+  if (isALevel) {
+    return <ALevelReportCard student={student} school={school} isMidTerm={true} />
+  }
+
+  const subjects = report.subjects || []
   const logoSrc = '/kiyingi_logo.png'
   const studentPhoto = student.photo ? mediaUrl(student.photo) : null
 
@@ -869,20 +1059,21 @@ export function AdminStudentReportsPage() {
   }, [printStudents])
 
   return (
-    <div className="stack">
-      {/* Page Title & Navigation Header */}
-      <div className="panel row spread" style={{ padding: '16px 20px' }}>
-        <div>
-          <h2>Student Directory & Bulk Report Cards</h2>
-          <p className="muted" style={{ margin: 0 }}>
-            Manage registered students from S1 through S6, generate bulk report cards, download class ZIP archives, and print directly.
-          </p>
+    <div className="stack admin-reports-root">
+      <div className="no-print stack">
+        {/* Page Title & Navigation Header */}
+        <div className="panel row spread" style={{ padding: '16px 20px' }}>
+          <div>
+            <h2>Student Directory & Bulk Report Cards</h2>
+            <p className="muted" style={{ margin: 0 }}>
+              Manage registered students from S1 through S6, generate bulk report cards, download class ZIP archives, and print directly.
+            </p>
+          </div>
+          <div className="row">
+            <Link to="/admin/students" className="btn sm">All Students Directory</Link>
+            <Link to="/admin/classes" className="btn sm">Manage Classes</Link>
+          </div>
         </div>
-        <div className="row">
-          <Link to="/admin/students" className="btn sm">All Students Directory</Link>
-          <Link to="/admin/classes" className="btn sm">Manage Classes</Link>
-        </div>
-      </div>
 
       {alertMsg.text && <Alert kind={alertMsg.kind}>{alertMsg.text}</Alert>}
 
@@ -1139,6 +1330,7 @@ export function AdminStudentReportsPage() {
           </div>
         )}
       </section>
+      </div>
 
       {/* Printable Report Cards Modal / View */}
       {printStudents && printStudents.length > 0 && (
@@ -1156,8 +1348,16 @@ export function AdminStudentReportsPage() {
           </div>
 
           <div className="report-card-print-container">
-            {printStudents.map((st) => (
-              <div key={st.id} style={{ pageBreakAfter: 'always' }}>
+            {printStudents.map((st, idx) => (
+              <div
+                key={st.id}
+                style={{
+                  pageBreakBefore: idx === 0 ? 'avoid' : 'always',
+                  breakBefore: idx === 0 ? 'avoid' : 'page',
+                  pageBreakAfter: idx === printStudents.length - 1 ? 'auto' : 'always',
+                  breakAfter: idx === printStudents.length - 1 ? 'auto' : 'page',
+                }}
+              >
                 {reportType === 'mid_term' ? <MidTermReportCard student={st} school={school} /> : <SingleReportCard student={st} school={school} />}
               </div>
             ))}

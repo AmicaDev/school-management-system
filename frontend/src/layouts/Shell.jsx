@@ -8,20 +8,13 @@ import { Modal, Skeleton, Tabs } from '../components/ui'
 export const NAVS = {
   ADMIN: [
     ['Overview', '/admin', '▦', true], ['sec', 'People'],
-    ['Students', '/admin/students', '🎓'], ['Parents', '/admin/parents', '👪'], ['Teachers', '/admin/teachers', '👩‍🏫'], ['Staff', '/admin/staff', '🧑‍💼'], ['Recycle bin', '/admin/recycle-bin', '♻'],
+    ['Students', '/admin/students', '🎓'], ['Parents', '/admin/parents', '👪'], ['Teachers', '/admin/teachers', '👩‍🏫'], ['Bursars & Cashiers', '/admin/bursars', '💼'], ['Staff', '/admin/staff', '🧑‍💼'], ['Recycle bin', '/admin/recycle-bin', '♻'],
     ['sec', 'Academics'], ['Classes & streams', '/admin/classes', '🏫'], ['Subjects', '/admin/subjects', '📘'], ['Teacher assignments', '/admin/assignments', '📋'], ['Years & terms', '/admin/academics', '📅'],
     ['Grading', '/admin/grading', '🅰'], ['Timetable', '/admin/timetable', '🕒'], ['Events', '/admin/events', '📣'],
     ['sec', 'Operations'], ['Attendance', '/admin/attendance', '✔'], ['Results', '/admin/results', '📝'], ['Reports', '/admin/reports', '🖨'],
     ['Analytics', '/admin/analytics', '📈'], ['Enquiries', '/admin/enquiries', '✉'], ['Notifications', '/admin/notifications', '🔔'],
     ['sec', 'Finance & Fees'],
     ['Finance overview', '/admin/finance', '💰'],
-    ['Bursars & Cashiers', '/admin/bursars', '💼'],
-    ['Record payment', '/admin/finance/payments/new', '💳'],
-    ['Student accounts', '/admin/finance/accounts', '👥'],
-    ['Receipts & history', '/admin/finance/receipts', '🧾'],
-    ['Fee structures', '/admin/finance/structures', '📋'],
-    ['Expenses', '/admin/finance/expenses', '📉'],
-    ['Financial reports', '/admin/finance/reports', '📊'],
     ['sec', 'System'], ['School profile', '/admin/settings', '⚙'], ['Users', '/admin/users', '🔑'], ['Audit logs', '/admin/audit', '🛡'],
   ],
   BURSAR: [

@@ -9,7 +9,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from apps.academics.models import SchoolProfile, TeachingAssignment
 from apps.attendance.models import AttendanceRecord
@@ -48,7 +48,13 @@ def build_report_card(student, term, is_mid_term=False):
     is_mt = bool(is_mid_term or getattr(term, "is_mid_term", False) or ("MID" in getattr(term, "name", "").upper()))
     # Mid-Term: pale yellow (#FFFACD)
     # End Of Term: vivid, bright neon green (or lime green) (#39FF14)
-    page_bg_color = colors.HexColor("#FFFACD") if is_mt else colors.HexColor("#39FF14")
+    # A-Level: vivid magenta/pink (#ff21da)
+    if is_a_level:
+        page_bg_color = colors.HexColor("#ff21da")
+        border_color = colors.HexColor("#0070c0")
+    else:
+        page_bg_color = colors.HexColor("#FFFACD") if is_mt else colors.HexColor("#39FF14")
+        border_color = colors.HexColor("#104a8e")
 
     # Look up teacher initials per subject
     teacher_initials = {}
@@ -174,48 +180,57 @@ def build_report_card(student, term, is_mid_term=False):
             f"<font size='8'><b>**Search for wisdom**</b></font><br/>"
             f"<font size='8.5'><b><u>END OF TERM {term.name.upper()} ASSESSMENT REPORT CARD {term.year.name}</u></b></font>"
         )
+        center_p = Paragraph(center_html, school_sub_style)
+        header_table = Table([[logo_img, center_p, photo_img]], colWidths=[26 * mm, 136 * mm, 26 * mm])
+        header_table.setStyle(
+            TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (0, 0), "CENTER"),
+                ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                ("ALIGN", (2, 0), (2, 0), "CENTER"),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+            ])
+        )
+        el.append(header_table)
+        el.append(Spacer(1, 1.5 * mm))
     else:
         center_html = (
-            f"<b>KIYINGI MEMORIAL SECONDARY SCHOOL</b><br/>"
-            f"3KM ALONG WABUSAANA-KYAMBOGO ROAD FROM KAKOOGE TOWNSHIP<br/>"
-            f"P.O.BOX KAMPALA UGANDA &nbsp;&nbsp;&nbsp;&nbsp; TEL: 0772511555 / 0701511555<br/>"
-            f"<i>''Search for wisdom''</i>"
+            f"<font size='10.5'><b>KIYINGI MEMORIAL SECONDARY SCHOOL</b></font><br/>"
+            f"<font size='7.5'><b>3KM ALONG WABUSAANA-KYAMBOGO ROAD FROM KAKOOGE TOWNSHIP</b></font><br/>"
+            f"<font size='7.5'><b>P.O.BOX KAMPALA UGANDA &nbsp;&nbsp;&nbsp;&nbsp; </b>"
+            f"<font color='#0070c0'><u><b>TEL:0772511555/0701511555</b></u></font></font><br/>"
+            f"<font size='8'><b>**Search for wisdom**</b></font>"
         )
-    center_p = Paragraph(center_html, school_sub_style)
-
-    header_table = Table([[logo_img, center_p, photo_img]], colWidths=[26 * mm, 136 * mm, 26 * mm])
-    header_table.setStyle(
-        TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("ALIGN", (0, 0), (0, 0), "CENTER"),
-            ("ALIGN", (1, 0), (1, 0), "CENTER"),
-            ("ALIGN", (2, 0), (2, 0), "CENTER"),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-            ("TOPPADDING", (0, 0), (-1, -1), 1),
-        ])
-    )
-    el.append(header_table)
-    el.append(Spacer(1, 1.5 * mm))
+        center_p = Paragraph(center_html, school_sub_style)
+        header_table = Table([[logo_img, center_p]], colWidths=[26 * mm, 162 * mm])
+        header_table.setStyle(
+            TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (0, 0), "CENTER"),
+                ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+            ])
+        )
+        el.append(header_table)
+        el.append(Spacer(1, 1 * mm))
+        el.append(HRFlowable(width="100%", thickness=0.8, color=colors.black, spaceBefore=1, spaceAfter=2))
 
     # 2. Report Card Title (for A-Level only; for O-Level it is integrated in header)
     if is_a_level:
-        title_text = f"<u>END OF TERM {term.name.upper()} A'LEVEL REPORT CARD {term.year.name}</u>"
+        term_title_str = "MID-TERM" if is_mt else f"END OF TERM {term.name.upper()}"
+        title_text = f"<u>{term_title_str} A'LEVEL REPORT CARD {term.year.name}</u>"
         el.append(Paragraph(f"<b>{title_text}</b>", card_title_style))
         el.append(Spacer(1, 2 * mm))
 
     # 3. Student Bio / Particulars
     if is_a_level:
         info_data = [
-            [
-                Paragraph(f"<b>NAME:</b> {student.full_name.upper()}", cell_style),
-                Paragraph(f"<b>COMBINATION:</b> {getattr(student, 'combination', '') or '—'}", cell_style),
-            ],
-            [
-                Paragraph(f"<b>CLASS:</b> {class_name.upper()}", cell_style),
-                Paragraph(f"<b>POINTS:</b> {summary.get('points', '—')}", cell_style),
-            ],
+            [Paragraph(f"<b>NAME:</b> &nbsp;{student.full_name.upper()}", cell_bold)],
+            [Paragraph(f"<b>CLASS:</b> &nbsp;{class_name.upper()}", cell_bold)],
         ]
-        info_table = Table(info_data, colWidths=[105 * mm, 83 * mm])
+        info_table = Table(info_data, colWidths=[188 * mm])
     else:
         info_data = [
             [Paragraph(f"<b>NAME:</b> {student.full_name.upper()}", cell_bold)],
@@ -513,19 +528,29 @@ def build_report_card(student, term, is_mid_term=False):
 
     else:
         # A-Level Performance Table
-        # Columns: SUBJECT | PP1 | PP2 | PP3 | GRADE | COMMENT | INITIALS
-        col_w = [56 * mm, 18 * mm, 18 * mm, 18 * mm, 18 * mm, 38 * mm, 20 * mm]
-        headers = [
+        # Two-level header matching the reference image:
+        # Row 0: SUBJECT (rowspan 2) | SCORES (colspan 3: PP1, PP2, PP3) | GRADE (rowspan 2) | COMMENT (rowspan 2) | INITIALS (rowspan 2)
+        # Row 1:                      | PP1 | PP2 | PP3                  |                   |                     |
+        col_w = [56 * mm, 16 * mm, 16 * mm, 16 * mm, 18 * mm, 44 * mm, 22 * mm]  # Total 188 mm
+        header_r1 = [
             Paragraph("<b>SUBJECT</b>", cell_bold),
-            Paragraph("<b>PP1</b>", cell_center_bold),
-            Paragraph("<b>PP2</b>", cell_center_bold),
-            Paragraph("<b>PP3</b>", cell_center_bold),
+            Paragraph("<b>SCORES</b>", cell_center_bold),
+            "",
+            "",
             Paragraph("<b>GRADE</b>", cell_center_bold),
             Paragraph("<b>COMMENT</b>", cell_center_bold),
             Paragraph("<b>INITIALS</b>", cell_center_bold),
         ]
-        table_rows = [headers]
-        total_pts = 0
+        header_r2 = [
+            "",
+            Paragraph("<b>PP1</b>", cell_center_bold),
+            Paragraph("<b>PP2</b>", cell_center_bold),
+            Paragraph("<b>PP3</b>", cell_center_bold),
+            "",
+            "",
+            "",
+        ]
+        table_rows = [header_r1, header_r2]
 
         for r in summary["subjects"]:
             sid = r["subject_id"]
@@ -539,35 +564,90 @@ def build_report_card(student, term, is_mid_term=False):
             p2_str = f"{p2.score:g}" if p2 else ""
             p3_str = f"{p3.score:g}" if p3 else ""
 
-            # If subsidiary (e.g. GP, Sub-Maths, ICT)
-            s_name_upper = r["subject"].upper()
-            is_sub = any(k in s_name_upper for k in ("G.P", "GENERAL PAPER", "SUBSIDIARY", "SUB MATH", "I.C.T", "ICT"))
+            # Check recorded paper marks
+            rec_scores = [float(p.score) for p in (p1, p2, p3) if p is not None]
+            if not rec_scores and r.get("papers"):
+                rec_scores = [float(v) for v in r["papers"].values() if v is not None]
 
-            tot_num = float(r["total"])
-            if is_sub:
-                grd = "1" if tot_num >= 50 else ("Pass" if tot_num >= 40 else "F")
+            # In A-level: (GRADE = PP1 + PP2 + PP3 / number of papers its marks recorded)
+            # or total recorded / number of papers
+            if rec_scores:
+                avg_sc = round(sum(rec_scores) / len(rec_scores), 1)
             else:
-                grd, _ = _grade_and_remark(tot_num)
+                try:
+                    avg_sc = float(r.get("total", 0) or 0)
+                except (ValueError, TypeError):
+                    avg_sc = 0.0
 
-            _, comment_str = _grade_and_remark(tot_num)
+            # NOTE: Grading scale uses O level grading scale
+            grd, comment_str = _grade_and_remark(avg_sc)
             initials = teacher_initials.get(sid, "")
-            total_pts += _a_level_points(grd)
 
             table_rows.append([
-                Paragraph(r["subject"], cell_style),
+                Paragraph(r["subject"].upper(), cell_style),
                 Paragraph(p1_str, cell_center),
                 Paragraph(p2_str, cell_center),
                 Paragraph(p3_str, cell_center),
-                Paragraph(grd, cell_center_bold),
+                Paragraph(f"<b>{grd}</b>", cell_center_bold),
                 Paragraph(comment_str, cell_center),
                 Paragraph(initials, cell_center),
             ])
 
-        perf_table = Table(table_rows, colWidths=col_w, repeatRows=1)
+        perf_table = Table(table_rows, colWidths=col_w, repeatRows=2)
         perf_table.setStyle(
             TableStyle([
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f4f8")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                ("SPAN", (0, 0), (0, 1)),
+                ("SPAN", (1, 0), (3, 0)),
+                ("SPAN", (4, 0), (4, 1)),
+                ("SPAN", (5, 0), (5, 1)),
+                ("SPAN", (6, 0), (6, 1)),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 1.5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+            ])
+        )
+        el.append(perf_table)
+        el.append(Spacer(1, 2.5 * mm))
+
+        # Subject Combination Box matching reference image
+        comb_title = Paragraph("<b>SUBJECT COMBINATION</b>", card_title_style)
+        el.append(comb_title)
+        el.append(Spacer(1, 1.5 * mm))
+
+        comb_subs = summary["subjects"][:5]
+        comb_col_w = [43 * mm, 29 * mm, 29 * mm, 29 * mm, 29 * mm, 29 * mm]
+        row1_cells = [Paragraph("", cell_center)]
+        row2_cells = [Paragraph("<b>POINTS</b>", cell_bold)]
+
+        for i in range(5):
+            if i < len(comb_subs):
+                sub = comb_subs[i]
+                s_name = sub.get("code") or sub.get("subject", "")[:5].upper()
+                row1_cells.append(Paragraph(f"<b>{s_name}</b>", cell_center_bold))
+
+                rec = [float(v) for v in (sub.get("papers") or {}).values() if v is not None]
+                if rec:
+                    avg_s = round(sum(rec) / len(rec), 1)
+                else:
+                    try:
+                        avg_s = float(sub.get("total", 0) or 0)
+                    except (ValueError, TypeError):
+                        avg_s = 0.0
+                g, _ = _grade_and_remark(avg_s)
+                pts_map = {"A": "6", "B": "5", "C": "4", "D": "3", "E": "2"}
+                pts = pts_map.get(g, "")
+                row2_cells.append(Paragraph(f"<b>{pts}</b>", cell_center_bold))
+            else:
+                row1_cells.append(Paragraph("", cell_center))
+                row2_cells.append(Paragraph("", cell_center))
+
+        comb_table = Table([row1_cells, row2_cells], colWidths=comb_col_w)
+        comb_table.setStyle(
+            TableStyle([
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("TOPPADDING", (0, 0), (-1, -1), 2),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
@@ -575,108 +655,41 @@ def build_report_card(student, term, is_mid_term=False):
                 ("RIGHTPADDING", (0, 0), (-1, -1), 2),
             ])
         )
-        el.append(perf_table)
+        el.append(comb_table)
         el.append(Spacer(1, 3 * mm))
 
-        # A-Level Grading Scale & Points
-        grade_scale_title = Paragraph("<b>GRADING SCALE & POINTS</b>", card_title_style)
-        el.append(grade_scale_title)
-        el.append(Spacer(1, 1 * mm))
-
-        scale_a_data = [
-            [
-                Paragraph("<b>80-100</b>", cell_center),
-                Paragraph("<b>70-79</b>", cell_center),
-                Paragraph("<b>60-69</b>", cell_center),
-                Paragraph("<b>50-59</b>", cell_center),
-                Paragraph("<b>40-49</b>", cell_center),
-                Paragraph("<b>35-39</b>", cell_center),
-                Paragraph("<b>0-34</b>", cell_center),
-            ],
-            [
-                Paragraph("<b>A</b>", cell_center_bold),
-                Paragraph("<b>B</b>", cell_center_bold),
-                Paragraph("<b>C</b>", cell_center_bold),
-                Paragraph("<b>D</b>", cell_center_bold),
-                Paragraph("<b>E</b>", cell_center_bold),
-                Paragraph("<b>O</b>", cell_center_bold),
-                Paragraph("<b>F</b>", cell_center_bold),
-            ],
-            [
-                Paragraph("6 Pts", cell_center),
-                Paragraph("5 Pts", cell_center),
-                Paragraph("4 Pts", cell_center),
-                Paragraph("3 Pts", cell_center),
-                Paragraph("2 Pts", cell_center),
-                Paragraph("1 Pt", cell_center),
-                Paragraph("0 Pts", cell_center),
-            ],
-            [
-                Paragraph("EXCELLENT", cell_center),
-                Paragraph("VERY GOOD", cell_center),
-                Paragraph("GOOD", cell_center),
-                Paragraph("FAIR", cell_center),
-                Paragraph("PASS", cell_center),
-                Paragraph("SUB PASS", cell_center),
-                Paragraph("FAIL", cell_center),
-            ],
-        ]
-        scale_a_table = Table(scale_a_data, colWidths=[27 * mm, 27 * mm, 27 * mm, 27 * mm, 27 * mm, 27 * mm, 26 * mm])
-        scale_a_table.setStyle(
-            TableStyle([
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f4f8")),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, -1), 1),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
-            ])
-        )
-        el.append(scale_a_table)
-        el.append(Spacer(1, 1 * mm))
-        sub_note = Paragraph(
-            "<font size='7.5'><i>Subsidiary Subjects (General Paper / Sub-Maths / ICT): Score &ge; 50 = Credit (1 Pt) | 40 - 49 = Pass | 0 - 39 = F (Fail)</i></font>",
-            cell_style,
-        )
-        el.append(sub_note)
-        el.append(Spacer(1, 2.5 * mm))
-
-        # A-Level Signatures & Remarks
+        # A-Level Remarks & Signatures matching reference image with dotted lines
         cls_rem = (comment.teacher_comment if comment else "") or ""
         head_rem = (comment.head_comment if comment else "") or ""
+        rem_style = ParagraphStyle("ALRem", parent=st["Normal"], fontName="Helvetica", fontSize=8, leading=11)
 
         el.append(
             Paragraph(
-                f"<b>CLASS TEACHER'S REMARKS:</b> {cls_rem}"
-                + (
-                    "<br/>.........................................................................................................................................................................................."
-                    if not cls_rem
-                    else ""
-                ),
-                cell_style,
+                f"<b>CLASS TEACHER'S REMARKS:</b> &nbsp;{cls_rem}"
+                + ("........................................................................................................................................................" if not cls_rem else ""),
+                rem_style,
             )
         )
+        el.append(Spacer(1, 3 * mm))
         el.append(
             Paragraph(
-                "<b>SIGN:</b> .....................................................................................................................................................................................................",
-                cell_style,
+                "<b>SIGN:</b> .........................................................................................................................................................................",
+                rem_style,
             )
         )
-        el.append(Spacer(1, 2.5 * mm))
+        el.append(Spacer(1, 3 * mm))
         el.append(
             Paragraph(
-                f"<b>HEADTEACHER'S REMARKS:</b> {head_rem}"
-                + (
-                    "<br/>.........................................................................................................................................................................................."
-                    if not head_rem
-                    else ""
-                ),
-                cell_style,
+                f"<b>HEADTEACHER'S REMARKS:</b> &nbsp;{head_rem}"
+                + ("........................................................................................................................................................" if not head_rem else ""),
+                rem_style,
             )
         )
+        el.append(Spacer(1, 3 * mm))
         el.append(
             Paragraph(
-                "<b>SIGN:</b> .....................................................................................................................................................................................................",
-                cell_style,
+                "<b>SIGN:</b> .........................................................................................................................................................................",
+                rem_style,
             )
         )
 
@@ -685,11 +698,11 @@ def build_report_card(student, term, is_mid_term=False):
         # 1. Page background fill
         # Mid-Term: pale yellow (#FFFACD)
         # End Of Term: vivid, bright neon green (#39FF14)
+        # A-Level: vivid magenta/pink (#ff21da)
         canvas.setFillColor(page_bg_color)
         canvas.rect(0, 0, 210 * mm, 297 * mm, fill=1, stroke=0)
 
-        # 2. Outer double blue frame matching the reference design
-        border_color = colors.HexColor("#104a8e")
+        # 2. Outer double frame matching the reference design
         canvas.setStrokeColor(border_color)
         canvas.setLineWidth(2.2)
         canvas.rect(6 * mm, 6 * mm, 198 * mm, 285 * mm)
