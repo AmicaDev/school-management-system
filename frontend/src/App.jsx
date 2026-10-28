@@ -104,6 +104,7 @@ export default function App() {
           <Route path="/admin/timetable" element={rp(R.timetable)} /><Route path="/admin/events" element={rp(R.events)} /><Route path="/admin/notifications" element={<S.NotificationsPage />} />
           <Route path="/admin/enquiries" element={<S.Enquiries />} /><Route path="/admin/analytics" element={<A.AdminDashboard view="analytics" />} />
           <Route path="/admin/finance" element={<F.FinanceOverview />} />
+          <Route path="/admin/bursars" element={<A.BursarManagementPage />} />
           <Route path="/admin/finance/payments/new" element={<F.RecordPaymentPage />} />
           <Route path="/admin/finance/accounts" element={<F.StudentAccountsPage />} />
           <Route path="/admin/finance/receipts" element={<F.ReceiptsHistoryPage />} />

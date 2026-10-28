@@ -951,4 +951,593 @@ export function TeacherAssignmentsPage() {
   )
 }
 
+export function BursarManagementPage() {
+  const [bursars, setBursars] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+
+  // Create Modal State
+  const [showCreate, setShowCreate] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    username: '',
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    password: '',
+  })
+  const [showCreatePw, setShowCreatePw] = useState(false)
+  const [createBusy, setCreateBusy] = useState(false)
+  const [createErr, setCreateErr] = useState('')
+
+  // Reset / Recover Password Modal State
+  const [resetBursar, setResetBursar] = useState(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showResetPw, setShowResetPw] = useState(false)
+  const [resetBusy, setResetBusy] = useState(false)
+  const [resetErr, setResetErr] = useState('')
+
+  // Success Credential Card Modal
+  const [credentialCard, setCredentialCard] = useState(null)
+
+  const loadBursars = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await api.get('/auth/users/?role=BURSAR')
+      setBursars(items(res.data) || [])
+    } catch (err) {
+      setError(errorMessage(err) || 'Failed to load bursar accounts.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadBursars()
+    const onRefresh = () => loadBursars()
+    window.addEventListener('sms:refresh', onRefresh)
+    return () => window.removeEventListener('sms:refresh', onRefresh)
+  }, [])
+
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
+    let pwd = ''
+    for (let i = 0; i < 10; i++) {
+      pwd += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return `Bursar#${pwd}`
+  }
+
+  const handleCreateSubmit = async (e) => {
+    e.preventDefault()
+    setCreateErr('')
+    if (!createForm.username || !createForm.password) {
+      return setCreateErr('Username and password are required.')
+    }
+    if (createForm.password.length < 8) {
+      return setCreateErr('Password must be at least 8 characters long.')
+    }
+    setCreateBusy(true)
+    try {
+      const payload = {
+        ...createForm,
+        username: createForm.username.trim(),
+        role: 'BURSAR',
+        is_active: true,
+      }
+      const res = await api.post('/auth/users/', payload)
+      setShowCreate(false)
+      setCredentialCard({
+        title: 'Bursar Account Created Successfully',
+        username: payload.username,
+        password: payload.password,
+        fullName: `${payload.first_name} ${payload.last_name}`.trim() || payload.username,
+        note: 'Share these credentials securely with the Bursar. They can log in at the main login page or /bursar/login to manage finances.',
+      })
+      setCreateForm({ username: '', first_name: '', last_name: '', email: '', phone: '', password: '' })
+      loadBursars()
+    } catch (err) {
+      setCreateErr(
+        err.response?.data?.username?.[0] ||
+        err.response?.data?.password?.[0] ||
+        err.response?.data?.detail ||
+        errorMessage(err) ||
+        'Failed to create bursar account.'
+      )
+    } finally {
+      setCreateBusy(false)
+    }
+  }
+
+  const handleResetSubmit = async (e) => {
+    e.preventDefault()
+    setResetErr('')
+    if (!newPassword) {
+      return setResetErr('Please enter a new password.')
+    }
+    if (newPassword.length < 8) {
+      return setResetErr('Password must be at least 8 characters long.')
+    }
+    if (newPassword !== confirmPassword) {
+      return setResetErr('Passwords do not match.')
+    }
+    setResetBusy(true)
+    try {
+      await api.post(`/auth/users/${resetBursar.id}/reset_password/`, {
+        new_password: newPassword,
+      })
+      const targetBursar = resetBursar
+      setResetBursar(null)
+      setCredentialCard({
+        title: 'Password Successfully Changed / Recovered',
+        username: targetBursar.username,
+        password: newPassword,
+        fullName: targetBursar.full_name || targetBursar.username,
+        note: 'The bursar password has been updated safely. Past payment receipts, student account transactions, and financial audit logs recorded by this bursar remain untouched.',
+      })
+      setNewPassword('')
+      setConfirmPassword('')
+      loadBursars()
+    } catch (err) {
+      setResetErr(
+        err.response?.data?.new_password?.[0] ||
+        err.response?.data?.detail ||
+        errorMessage(err) ||
+        'Failed to update password.'
+      )
+    } finally {
+      setResetBusy(false)
+    }
+  }
+
+  const handleToggleActive = async (bursar) => {
+    const willDeactivate = bursar.is_active
+    const confirmMsg = willDeactivate
+      ? `Deactivate account for "${bursar.full_name || bursar.username}"? They will no longer be able to log in, but all their previous financial receipts and records will be preserved.`
+      : `Reactivate account for "${bursar.full_name || bursar.username}"?`
+    if (!window.confirm(confirmMsg)) return
+
+    try {
+      await api.patch(`/auth/users/${bursar.id}/`, { is_active: !bursar.is_active })
+      loadBursars()
+    } catch (err) {
+      alert(errorMessage(err) || 'Failed to update account status.')
+    }
+  }
+
+  const copyCredentials = (cred) => {
+    const text = `School SMS Bursar Credentials:\nUsername: ${cred.username}\nPassword: ${cred.password}\nSign in at: ${window.location.origin}/login (Sign in as Bursar) or ${window.location.origin}/bursar/login`
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        alert('Credentials copied to clipboard!')
+      }).catch(() => {
+        prompt('Copy credentials:', text)
+      })
+    } else {
+      prompt('Copy credentials:', text)
+    }
+  }
+
+  const filtered = bursars.filter((b) => {
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    return (
+      b.username?.toLowerCase().includes(q) ||
+      b.full_name?.toLowerCase().includes(q) ||
+      b.email?.toLowerCase().includes(q) ||
+      b.phone?.toLowerCase().includes(q)
+    )
+  })
+
+  const totalCount = bursars.length
+  const activeCount = bursars.filter((b) => b.is_active).length
+  const inactiveCount = bursars.filter((b) => !b.is_active).length
+
+  return (
+    <div className="stack" style={{ gap: 20 }}>
+      {/* Header and overview */}
+      <div className="panel" style={{ background: 'var(--surface)' }}>
+        <div className="row spread" style={{ flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>💼</span> Bursars & Cashiers Management
+            </h2>
+            <p className="muted" style={{ margin: '4px 0 0 0', fontSize: 13, maxWidth: 760 }}>
+              Create bursar accounts, manage credentials, and safely recover passwords. Updating passwords
+              never affects previous fee receipts, student ledger transactions, or audit logs recorded by the bursar.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => {
+              setShowCreate(true)
+              setCreateErr('')
+              setCreateForm({
+                username: '',
+                first_name: '',
+                last_name: '',
+                email: '',
+                phone: '',
+                password: generatePassword(),
+              })
+            }}
+          >
+            + Create Bursar Account
+          </button>
+        </div>
+
+        {/* Stats Row */}
+        <div className="row" style={{ gap: 16, marginTop: 16, flexWrap: 'wrap' }}>
+          <div className="card" style={{ flex: '1 1 180px', padding: '12px 16px', background: 'var(--bg)' }}>
+            <div className="muted" style={{ fontSize: 12 }}>Total Accounts</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--primary)' }}>{totalCount}</div>
+          </div>
+          <div className="card" style={{ flex: '1 1 180px', padding: '12px 16px', background: 'var(--bg)' }}>
+            <div className="muted" style={{ fontSize: 12 }}>Active Cashiers</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: '#2e7d32' }}>{activeCount}</div>
+          </div>
+          <div className="card" style={{ flex: '1 1 180px', padding: '12px 16px', background: 'var(--bg)' }}>
+            <div className="muted" style={{ fontSize: 12 }}>Deactivated</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--muted)' }}>{inactiveCount}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Info notice about separate dashboard & data integrity */}
+      <div className="alert info" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 22 }}>🛡️</span>
+        <div>
+          <b>Dedicated Finance Dashboard:</b> Bursars sign in and work strictly within their own Finance Management
+          Dashboard (<code>/bursar</code>). Changing or recovering passwords updates login authentication securely without
+          affecting any past collections, receipt numbers, or audit trail data.
+        </div>
+      </div>
+
+      {/* Table Section */}
+      <div className="panel stack" style={{ gap: 14 }}>
+        <div className="row spread" style={{ flexWrap: 'wrap', gap: 10 }}>
+          <input
+            className="input"
+            style={{ maxWidth: 320 }}
+            placeholder="Search bursars by name, username, email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <button type="button" className="btn ghost sm" onClick={loadBursars}>
+            🔄 Refresh List
+          </button>
+        </div>
+
+        {error && <Alert kind="error">{error}</Alert>}
+
+        {loading ? (
+          <Skeleton rows={5} />
+        ) : filtered.length === 0 ? (
+          <Empty
+            title={search ? 'No bursars match your search' : 'No bursar accounts yet'}
+            note={search ? 'Try a different search term.' : 'Click "+ Create Bursar Account" above to add the school bursar.'}
+          />
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Staff & Username</th>
+                  <th>Contact Info</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Date Added</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((b) => (
+                  <tr key={b.id}>
+                    <td>
+                      <div><b>{b.full_name || '—'}</b></div>
+                      <div className="muted" style={{ fontSize: 12 }}>@{b.username}</div>
+                    </td>
+                    <td>
+                      <div>{b.email || '—'}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{b.phone || '—'}</div>
+                    </td>
+                    <td>
+                      <span className="badge info">BURSAR / Cashier</span>
+                    </td>
+                    <td>
+                      <span
+                        className="badge"
+                        style={{
+                          background: b.is_active ? 'color-mix(in srgb, #2e7d32 15%, transparent)' : 'color-mix(in srgb, var(--danger) 15%, transparent)',
+                          color: b.is_active ? '#2e7d32' : 'var(--danger)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {b.is_active ? 'Active' : 'Deactivated'}
+                      </span>
+                    </td>
+                    <td>{fmtDate(b.created_at)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
+                        <button
+                          type="button"
+                          className="btn sm"
+                          title="Change or recover bursar password"
+                          onClick={() => {
+                            setResetBursar(b)
+                            const gen = generatePassword()
+                            setNewPassword(gen)
+                            setConfirmPassword(gen)
+                            setResetErr('')
+                          }}
+                        >
+                          🔑 Change Password
+                        </button>
+                        <button
+                          type="button"
+                          className="btn ghost sm"
+                          onClick={() => handleToggleActive(b)}
+                        >
+                          {b.is_active ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Modal: Create Bursar Account */}
+      {showCreate && (
+        <Modal title="Create New Bursar / Accountant Account" onClose={() => setShowCreate(false)}>
+          <form onSubmit={handleCreateSubmit} className="stack" style={{ gap: 14 }}>
+            {createErr && <Alert kind="error">{createErr}</Alert>}
+
+            <div className="row" style={{ gap: 12 }}>
+              <div className="field" style={{ flex: 1 }}>
+                <label>First Name *</label>
+                <input
+                  required
+                  className="input"
+                  placeholder="e.g. Sarah"
+                  value={createForm.first_name}
+                  onChange={(e) => setCreateForm({ ...createForm, first_name: e.target.value })}
+                />
+              </div>
+              <div className="field" style={{ flex: 1 }}>
+                <label>Last Name *</label>
+                <input
+                  required
+                  className="input"
+                  placeholder="e.g. Namubiru"
+                  value={createForm.last_name}
+                  onChange={(e) => setCreateForm({ ...createForm, last_name: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="field">
+              <label>Username *</label>
+              <input
+                required
+                className="input"
+                placeholder="e.g. bursar_sarah"
+                autoComplete="off"
+                value={createForm.username}
+                onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })}
+              />
+              <span className="muted" style={{ fontSize: 12 }}>This will be used by the bursar to sign in.</span>
+            </div>
+
+            <div className="row" style={{ gap: 12 }}>
+              <div className="field" style={{ flex: 1 }}>
+                <label>Email Address</label>
+                <input
+                  type="email"
+                  className="input"
+                  placeholder="bursar@school.ac.ug"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                />
+              </div>
+              <div className="field" style={{ flex: 1 }}>
+                <label>Phone Number</label>
+                <input
+                  type="tel"
+                  className="input"
+                  placeholder="+256 700 000 000"
+                  value={createForm.phone}
+                  onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="field">
+              <div className="row spread" style={{ marginBottom: 4 }}>
+                <label style={{ margin: 0 }}>Initial Password *</label>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  style={{ padding: '0 6px', fontSize: 12 }}
+                  onClick={() => setCreateForm({ ...createForm, password: generatePassword() })}
+                >
+                  🎲 Auto-Generate Strong Password
+                </button>
+              </div>
+              <div className="pw-wrap" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type={showCreatePw ? 'text' : 'password'}
+                  required
+                  minLength={8}
+                  className="input"
+                  style={{ width: '100%', paddingRight: 40 }}
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                  placeholder="Minimum 8 characters"
+                />
+                <button
+                  type="button"
+                  className="pw-eye"
+                  onClick={() => setShowCreatePw((s) => !s)}
+                  aria-label="Toggle password"
+                >
+                  {showCreatePw ? '👁' : '👁‍🗨'}
+                </button>
+              </div>
+            </div>
+
+            <div className="row spread" style={{ marginTop: 12 }}>
+              <button type="button" className="btn ghost" onClick={() => setShowCreate(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn primary" disabled={createBusy}>
+                {createBusy ? 'Creating…' : 'Create Bursar Account'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Modal: Change / Recover Bursar Password */}
+      {resetBursar && (
+        <Modal
+          title={`Change / Recover Password: ${resetBursar.full_name || resetBursar.username}`}
+          onClose={() => setResetBursar(null)}
+        >
+          <form onSubmit={handleResetSubmit} className="stack" style={{ gap: 14 }}>
+            {resetErr && <Alert kind="error">{resetErr}</Alert>}
+
+            <div className="alert info" style={{ fontSize: 13 }}>
+              <b>Account:</b> @{resetBursar.username} ({resetBursar.full_name})<br />
+              <b>Safety guarantee:</b> Resetting the password updates login access only. All previous receipts, fee
+              records, and payments collected by this bursar will remain safely preserved in the database.
+            </div>
+
+            <div className="field">
+              <div className="row spread" style={{ marginBottom: 4 }}>
+                <label style={{ margin: 0 }}>New Password *</label>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  style={{ padding: '0 6px', fontSize: 12 }}
+                  onClick={() => {
+                    const pwd = generatePassword()
+                    setNewPassword(pwd)
+                    setConfirmPassword(pwd)
+                  }}
+                >
+                  🎲 Generate Strong Password
+                </button>
+              </div>
+              <div className="pw-wrap" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type={showResetPw ? 'text' : 'password'}
+                  required
+                  minLength={8}
+                  className="input"
+                  style={{ width: '100%', paddingRight: 40 }}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password (min. 8 characters)"
+                />
+                <button
+                  type="button"
+                  className="pw-eye"
+                  onClick={() => setShowResetPw((s) => !s)}
+                  aria-label="Toggle password"
+                >
+                  {showResetPw ? '👁' : '👁‍🗨'}
+                </button>
+              </div>
+            </div>
+
+            <div className="field">
+              <label>Confirm New Password *</label>
+              <input
+                type={showResetPw ? 'text' : 'password'}
+                required
+                className="input"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+              />
+            </div>
+
+            <div className="row spread" style={{ marginTop: 12 }}>
+              <button type="button" className="btn ghost" onClick={() => setResetBursar(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn primary" disabled={resetBusy}>
+                {resetBusy ? 'Updating Password…' : 'Update Bursar Password'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Modal: Credential Card (for newly created or recovered accounts) */}
+      {credentialCard && (
+        <Modal title={credentialCard.title} onClose={() => setCredentialCard(null)}>
+          <div className="stack" style={{ gap: 14 }}>
+            <p style={{ margin: 0 }}>{credentialCard.note}</p>
+
+            <div
+              className="card stack"
+              style={{
+                background: 'color-mix(in srgb, var(--surface) 92%, var(--primary) 8%)',
+                border: '1px solid var(--primary)',
+                padding: 16,
+                gap: 10,
+              }}
+            >
+              <div className="row spread">
+                <span className="muted" style={{ fontSize: 13 }}>Full Name:</span>
+                <b>{credentialCard.fullName}</b>
+              </div>
+              <div className="row spread">
+                <span className="muted" style={{ fontSize: 13 }}>Role:</span>
+                <span className="badge info">Bursar / Cashier</span>
+              </div>
+              <div className="row spread">
+                <span className="muted" style={{ fontSize: 13 }}>Username:</span>
+                <code style={{ fontSize: 15, fontWeight: 700 }}>{credentialCard.username}</code>
+              </div>
+              <div className="row spread">
+                <span className="muted" style={{ fontSize: 13 }}>Password:</span>
+                <code style={{ fontSize: 15, fontWeight: 700, color: 'var(--primary)' }}>
+                  {credentialCard.password}
+                </code>
+              </div>
+            </div>
+
+            <div className="row spread" style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => copyCredentials(credentialCard)}
+              >
+                📋 Copy Login Credentials
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setCredentialCard(null)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
 export { AdminStudentReportsPage } from './StudentReports'

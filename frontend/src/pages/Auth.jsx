@@ -20,18 +20,26 @@ function EyeToggle({ show, onToggle }) {
   )
 }
 
-function AuthFrame({ title, children, side = true }) {
+function AuthFrame({
+  title,
+  children,
+  side = true,
+  banner = 'SEARCH FOR WISDOM',
+  roles = 'ADMIN, PARENTS, TEACHERS, DEVELOPER',
+  sideStyle,
+  bannerStyle,
+}) {
   return (
     <div className="auth-wrap">
       <div className="auth-stripes top" aria-hidden="true">
         <span className="stripe s-black" /><span className="stripe s-yellow" /><span className="stripe s-red" />
       </div>
-      {side && <aside className="auth-side">
+      {side && <aside className="auth-side" style={sideStyle}>
         <div className="auth-emblem" aria-hidden="true">
           <img src={badgeImg} alt="Kiyingi Memorial Secondary School" />
         </div>
-        <div className="auth-banner">SEARCH FOR WISDOM</div>
-        <small className="auth-roles">ADMIN, PARENTS, TEACHERS, DEVELOPER</small>
+        <div className="auth-banner" style={bannerStyle}>{banner}</div>
+        <small className="auth-roles">{roles}</small>
       </aside>}
       <main className="auth-main">
         <div className="auth-watermark" style={{ backgroundImage: `url(${coatImg})` }} aria-hidden="true" />
@@ -51,14 +59,18 @@ export function Login() {
   const { login, teacherLogin } = useAuth()
   const nav = useNavigate()
   const loc = useLocation()
-  const [isTeacher, setIsTeacher] = useState(false)
+  const [sp] = useSearchParams()
+  const [mode, setMode] = useState(() => (sp.get('role') === 'bursar' || sp.get('portal') === 'bursar' ? 'bursar' : 'general'))
   const [f, setF] = useState({ username: '', password: '' })
   const [showPw, setShowPw] = useState(false)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const switchMode = (teacherMode) => {
-    setIsTeacher(teacherMode)
+  const isTeacher = mode === 'teacher'
+  const isBursar = mode === 'bursar'
+
+  const switchMode = (newMode) => {
+    setMode(newMode)
     setErr('')
     setF({ username: '', password: '' })
     setShowPw(false)
@@ -67,13 +79,27 @@ export function Login() {
   const submit = async (e) => {
     e.preventDefault()
     if (!f.username || !f.password) {
-      return setErr(isTeacher ? 'Enter your teacher identifier and admin-issued code.' : 'Enter your username (or student index number) and password.')
+      return setErr(
+        isTeacher
+          ? 'Enter your teacher identifier and admin-issued code.'
+          : isBursar
+          ? 'Enter your bursar username (or email) and password.'
+          : 'Enter your username (or student index number) and password.'
+      )
     }
     setBusy(true); setErr('')
     try {
       const u = isTeacher
         ? await teacherLogin(f.username.trim(), f.password.trim())
         : await login(f.username.trim(), f.password)
+
+      if (isBursar) {
+        if (u.role === 'BURSAR' || u.role === 'ADMIN') {
+          nav('/bursar', { replace: true })
+          return
+        }
+      }
+
       const from = loc.state?.from
       nav(from && from.startsWith(HOME[u.role]) ? from : HOME[u.role], { replace: true })
     } catch (e2) {
@@ -83,8 +109,18 @@ export function Login() {
   }
 
   return (
-    <AuthFrame title={isTeacher ? 'Teacher sign in' : 'Sign in'}>
-      {isTeacher ? (
+    <AuthFrame
+      title={isBursar ? 'Bursar & Accountant sign in' : isTeacher ? 'Teacher sign in' : 'Sign in'}
+      banner={isBursar ? 'ACCOUNTS & CASH OFFICE' : undefined}
+      roles={isBursar ? 'BURSAR & FINANCE PORTAL' : undefined}
+      sideStyle={isBursar ? { background: '#0e3a24' } : undefined}
+      bannerStyle={isBursar ? { color: '#85e3a8' } : undefined}
+    >
+      {isBursar ? (
+        <p className="auth-sub">
+          Sign in using your assigned Bursar or Accountant credentials to access Finance Management.
+        </p>
+      ) : isTeacher ? (
         <p className="auth-sub">
           Sign in using your assigned teacher username, email, or full name and your admin-issued code.
         </p>
@@ -96,12 +132,14 @@ export function Login() {
       <Alert>{err}</Alert>
       <form onSubmit={submit} noValidate>
         <div className="field">
-          <label htmlFor="u">{isTeacher ? 'Teacher username' : 'Username or student index number'}</label>
+          <label htmlFor="u">
+            {isBursar ? 'Bursar username or email' : isTeacher ? 'Teacher username' : 'Username or student index number'}
+          </label>
           <input
             id="u"
             className="input"
             autoComplete="username"
-            placeholder={isTeacher ? 'Username, email, or full name' : 'Username'}
+            placeholder={isBursar ? 'bursar_username or email' : isTeacher ? 'Username, email, or full name' : 'Username'}
             value={f.username}
             onChange={(e) => setF({ ...f, username: e.target.value })}
           />
@@ -122,22 +160,44 @@ export function Login() {
           </div>
         </div>
         <button className="btn primary auth-btn" style={{ width: '100%' }} disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? 'Signing in…' : isBursar ? 'Sign in to Finance Management' : 'Sign in'}
         </button>
       </form>
-      <p className="auth-links">
-        {isTeacher ? (
-          <button type="button" onClick={() => switchMode(false)}>
-            Sign in as a student or staff
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', marginTop: 14 }}>
+        {!isBursar ? (
+          <button
+            type="button"
+            className="btn ghost sm"
+            style={{ width: '100%', borderColor: 'var(--border)', fontWeight: 600 }}
+            onClick={() => switchMode('bursar')}
+          >
+            💳 Sign in as Bursar or Accountant
           </button>
         ) : (
-          <button type="button" onClick={() => switchMode(true)}>
-            Sign in as a teacher?
+          <button
+            type="button"
+            className="btn ghost sm"
+            style={{ width: '100%', borderColor: 'var(--border)' }}
+            onClick={() => switchMode('general')}
+          >
+            ← Back to standard sign in
           </button>
         )}
-        {' · '}
-        <Link to="/forgot-password">Forgot password</Link> · <Link to="/register">Need an account?</Link>
-      </p>
+        <p className="auth-links" style={{ margin: 0 }}>
+          {isTeacher ? (
+            <button type="button" onClick={() => switchMode('general')}>
+              Sign in as a student or staff
+            </button>
+          ) : (
+            <button type="button" onClick={() => switchMode('teacher')}>
+              Sign in as a teacher?
+            </button>
+          )}
+          {' · '}
+          <Link to="/forgot-password">Forgot password</Link>
+          {!isBursar && <> · <Link to="/register">Need an account?</Link></>}
+        </p>
+      </div>
     </AuthFrame>
   )
 }
