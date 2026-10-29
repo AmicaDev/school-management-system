@@ -26,6 +26,7 @@ export const NAVS = {
     ['My collections', '/bursar/my-collections', '💵'],
     ['sec', 'Expenditure & Setup'],
     ['Fee structures', '/bursar/structures', '📋'],
+    ['Fee categories', '/bursar/categories', '🏷️'],
     ['School expenses', '/bursar/expenses', '📉'],
     ['Financial reports', '/bursar/reports', '📊'],
     ['sec', 'Communication'],
@@ -36,7 +37,7 @@ export const NAVS = {
     ['Assignments', '/teacher/assignments', '📋'], ['Timetable', '/teacher/timetable', '🕒'], ['Enquiries', '/teacher/enquiries', '✉'], ['Notifications', '/teacher/notifications', '🔔'],
   ],
   PARENT: [
-    ['Dashboard', '/parent', '▦', true], ['Children', '/parent/children', '🎓'], ['Attendance', '/parent/attendance', '✔'], ['Results', '/parent/results', '📝'],
+    ['Dashboard', '/parent', '▦', true], ['Children', '/parent/children', '🎓'], ['Fees & Payments', '/parent/fees', '💰'], ['Attendance', '/parent/attendance', '✔'], ['Results', '/parent/results', '📝'],
     ['Performance', '/parent/performance', '📈'], ['Timetable', '/parent/timetable', '🕒'], ['Events', '/parent/events', '📣'],
     ['Notifications', '/parent/notifications', '🔔'], ['Enquiries', '/parent/enquiries', '✉'], ['My profile', '/parent/profile', '👤'],
   ],

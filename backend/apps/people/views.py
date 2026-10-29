@@ -30,7 +30,7 @@ class StudentViewSet(AuditMixin, viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ("list", "retrieve", "profile"):
-            return [roles_required(R.ADMIN, R.TEACHER, R.PARENT)()]
+            return [roles_required(R.ADMIN, R.TEACHER, R.PARENT, R.BURSAR)()]
         return [IsAdmin()]
 
     def get_serializer_class(self):

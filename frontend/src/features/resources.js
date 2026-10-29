@@ -164,11 +164,12 @@ export const R = {
       { key: 'name', label: 'Category Name' },
       { key: 'code', label: 'Code' },
       { key: 'description', label: 'Description' },
+      { key: 'is_approved', label: 'Approval Status', render: (r) => (r.is_approved ? h('span', { className: 'badge success' }, 'Approved') : h('span', { className: 'badge warning' }, 'Pending Admin Approval')) },
       { key: 'is_active', label: 'Active', render: yes('is_active') }
     ],
     fields: [
-      { name: 'name', label: 'Name', required: true },
-      { name: 'code', label: 'Code (e.g. TUITION, BOARDING)', required: true },
+      { name: 'name', label: 'Category Name (e.g. Tuition, Boarding, Meals, Transport)', required: true },
+      { name: 'code', label: 'Code (e.g. TUITION, BOARDING, MEALS)', required: true },
       { name: 'description', label: 'Description', type: 'textarea' },
       { name: 'is_active', label: 'Active', type: 'checkbox', default: true }
     ]
@@ -189,6 +190,7 @@ export const R = {
     ],
     fields: [
       { name: 'school_class', label: 'Class', type: 'select', required: true, options: schoolClasses },
+      { name: 'academic_year', label: 'Academic Year', type: 'select', options: yearsList, help: 'Optional: auto-detected from Term or active year' },
       { name: 'term', label: 'Term (Leave empty for annual/all terms)', type: 'select', options: termsList },
       { name: 'category', label: 'Fee Category', type: 'select', required: true, options: feeCategories },
       { name: 'amount', label: 'Amount (UGX)', type: 'number', required: true },

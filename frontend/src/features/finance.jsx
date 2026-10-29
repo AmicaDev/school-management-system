@@ -13,7 +13,7 @@ export const fmtUGX = (n) => {
   return 'UGX ' + num.toLocaleString()
 }
 
-export function ReceiptModal({ paymentId, onClose, onReversed }) {
+export function ReceiptModal({ paymentId, onClose, onReversed, canReverse = true }) {
   const { data, loading, error, reload } = useFetch(paymentId ? `/finance/payments/${paymentId}/receipt/` : null)
   const [reversing, setReversing] = useState(false)
   const [revReason, setRevReason] = useState('')
@@ -61,7 +61,7 @@ export function ReceiptModal({ paymentId, onClose, onReversed }) {
               <button type="button" className="btn primary" onClick={handlePrint}>
                 🖨️ Print Receipt
               </button>
-              {!data.is_reversed && (
+              {canReverse && !data.is_reversed && (
                 <button
                   type="button"
                   className="btn sm danger"
@@ -232,6 +232,55 @@ export function ReceiptModal({ paymentId, onClose, onReversed }) {
   )
 }
 
+function PendingCategoryApprovals() {
+  const { data, reload } = useFetch('/finance/categories/?is_approved=false')
+  const [approving, setApproving] = useState(null)
+  const pending = items(data)
+  if (!pending.length) return null
+
+  const handleApprove = async (id) => {
+    setApproving(id)
+    try {
+      await api.post(`/finance/categories/${id}/approve/`)
+      reload()
+    } catch (e) {
+      alert(errorMessage(e))
+    } finally {
+      setApproving(null)
+    }
+  }
+
+  return (
+    <div className="panel" style={{ borderLeft: '4px solid #ffc107', background: 'var(--surface-raised, #fffdf5)' }}>
+      <div className="panel-head">
+        <div>
+          <h3 style={{ margin: 0 }}>🏷️ Fee Categories Pending Approval ({pending.length})</h3>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Review and approve new fee categories submitted by the bursar.</p>
+        </div>
+      </div>
+      <div className="stack" style={{ gap: 8, marginTop: 10 }}>
+        {pending.map((c) => (
+          <div key={c.id} className="row spread" style={{ padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)' }}>
+            <div>
+              <b>{c.name}</b> <span className="muted">· Code: <code>{c.code}</code></span>
+              {c.created_by_name && <small className="muted" style={{ marginLeft: 8 }}>Submitted by: {c.created_by_name}</small>}
+              {c.description && <div className="muted" style={{ fontSize: 12 }}>{c.description}</div>}
+            </div>
+            <button
+              type="button"
+              className="btn sm primary"
+              disabled={approving === c.id}
+              onClick={() => handleApprove(c.id)}
+            >
+              {approving === c.id ? 'Approving…' : '✓ Approve Category'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function FinanceOverview() {
   const { terms, active } = useTerms()
   const [termId, setTermId] = useState(null)
@@ -268,17 +317,12 @@ export function FinanceOverview() {
             <button className="btn sm" onClick={reload}>Refresh</button>
           </div>
         </div>
-
-        {/* Quick action buttons */}
-        <div className="row wrap" style={{ gap: 10, marginTop: 16 }}>
-          <Link className="btn primary lg" to="/admin/finance/payments/new">💳 Record Payment</Link>
-          <Link className="btn lg" to="/admin/finance/accounts">👥 Student Accounts</Link>
-          <Link className="btn lg" to="/admin/finance/receipts">🧾 Receipts & History</Link>
-          <Link className="btn lg" to="/admin/finance/structures">📋 Fee Structures</Link>
-          <Link className="btn lg" to="/admin/finance/expenses">📉 School Expenses</Link>
-          <Link className="btn lg" to="/admin/finance/reports">📊 Full Financial Reports</Link>
-        </div>
+        <p className="muted" style={{ margin: '12px 0 0' }}>
+          Real-time institutional revenue overview, cash flow indicators, and expenditure breakdown.
+        </p>
       </div>
+
+      <PendingCategoryApprovals />
 
       {loading ? (
         <Skeleton rows={6} />
@@ -401,9 +445,20 @@ export function RecordPaymentPage() {
     }
   }, [balanceFetch.data]) // eslint-disable-line
 
-  // Student search
-  const studentsFetch = useFetch(studentSearch ? '/students/' : null, { search: studentSearch, page_size: 10 })
-  const searchResults = items(studentsFetch.data)
+  // Load registered students for bursar selection
+  const studentsFetch = useFetch('/students/', { page_size: 1000, is_archived: 'false' })
+  const allStudents = useMemo(() => items(studentsFetch.data) || [], [studentsFetch.data])
+
+  const filteredStudents = useMemo(() => {
+    if (!studentSearch.trim()) return allStudents
+    const q = studentSearch.toLowerCase()
+    return allStudents.filter(
+      (s) =>
+        s.full_name?.toLowerCase().includes(q) ||
+        s.index_no?.toLowerCase().includes(q) ||
+        s.stream_label?.toLowerCase().includes(q)
+    )
+  }, [allStudents, studentSearch])
 
   const wordsPreview = useMemo(() => {
     if (!amount || isNaN(Number(amount))) return ''
@@ -448,7 +503,7 @@ export function RecordPaymentPage() {
       <section className="panel" style={{ maxWidth: 840, margin: '0 auto', width: '100%' }}>
         <div className="panel-head">
           <h2>💳 Record Student Fee Payment</h2>
-          <Link className="btn sm" to="/admin/finance/accounts">← Student Accounts</Link>
+          <Link className="btn sm" to="/bursar/accounts">← Student Accounts</Link>
         </div>
 
         {saveError && <Alert kind="error">{saveError}</Alert>}
@@ -474,27 +529,54 @@ export function RecordPaymentPage() {
             </div>
 
             <div className="field">
-              <label>Select Student *</label>
-              <input
-                className="input"
-                placeholder="Search student by name or index no…"
-                value={studentSearch}
-                onChange={(e) => setStudentSearch(e.target.value)}
-              />
-              {searchResults.length > 0 && studentSearch && (
-                <div className="stack" style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, marginTop: 4, background: 'var(--surface)' }}>
-                  {searchResults.map((s) => (
-                    <div
-                      key={s.id}
-                      style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
-                      onClick={() => {
-                        setStudentId(s.id)
-                        setStudentSearch(`${s.full_name} (${s.index_no})`)
-                      }}
-                    >
-                      <b>{s.full_name}</b> <span className="muted">· {s.index_no} · {s.stream_label || ''}</span>
-                    </div>
-                  ))}
+              <label>Select Student * ({allStudents.length} registered)</label>
+              {studentId && (selectedStudent || allStudents.find((s) => s.id === studentId)) ? (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div className="input" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-raised, #f8f9fa)' }}>
+                    <span>
+                      <b>{selectedStudent?.student_name || allStudents.find((s) => s.id === studentId)?.full_name}</b> <span className="muted">· {selectedStudent?.index_no || allStudents.find((s) => s.id === studentId)?.index_no} · {selectedStudent?.class_name || allStudents.find((s) => s.id === studentId)?.stream_label}</span>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={() => {
+                      setStudentId('')
+                      setSelectedStudent(null)
+                      setStudentSearch('')
+                    }}
+                  >
+                    Change Student
+                  </button>
+                </div>
+              ) : (
+                <div className="stack" style={{ gap: 6 }}>
+                  <input
+                    className="input"
+                    placeholder="Type to filter registered students by name or index…"
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                  />
+                  <select
+                    className="input"
+                    value={studentId || ''}
+                    onChange={(e) => {
+                      const idNum = Number(e.target.value)
+                      setStudentId(idNum)
+                      const found = allStudents.find((s) => s.id === idNum)
+                      if (found) {
+                        setStudentSearch(`${found.full_name} (${found.index_no})`)
+                      }
+                    }}
+                    required
+                  >
+                    <option value="">— Select a student ({filteredStudents.length} available) —</option>
+                    {filteredStudents.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.full_name} ({s.index_no}) {s.stream_label ? `· ${s.stream_label}` : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
             </div>
@@ -541,7 +623,9 @@ export function RecordPaymentPage() {
               <select className="input" value={method} onChange={(e) => setMethod(e.target.value)} required>
                 <option value="CASH">Cash</option>
                 <option value="BANK">Bank Deposit / Transfer</option>
-                <option value="MOBILE_MONEY">Mobile Money</option>
+                <option value="MTN_MOBILE_MONEY">MTN Mobile Money</option>
+                <option value="AIRTEL_MONEY">Airtel Money</option>
+                <option value="MOBILE_MONEY">Other Mobile Money</option>
                 <option value="OTHER">Other</option>
               </select>
             </div>
@@ -629,7 +713,7 @@ export function RecordPaymentPage() {
           paymentId={newReceiptId}
           onClose={() => {
             setNewReceiptId(null)
-            navigate('/admin/finance/accounts')
+            navigate('/bursar/accounts')
           }}
         />
       )}
@@ -688,7 +772,7 @@ export function StudentAccountsPage() {
             <h2>👥 Student Fee Accounts</h2>
             <p className="muted">Track student billing, total paid, and outstanding balances per class and term.</p>
           </div>
-          <Link className="btn primary" to="/admin/finance/payments/new">💳 Record Payment</Link>
+          <Link className="btn primary" to="/bursar/payments/new">💳 Record Payment</Link>
         </div>
 
         {reminderNotice && (
@@ -795,7 +879,7 @@ export function StudentAccountsPage() {
                 render: (r) => (
                   <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
                     <button className="btn sm" onClick={() => setStatementStudentId(r.student_id)}>Statement</button>
-                    <Link className="btn sm primary" to={`/admin/finance/payments/new?student=${r.student_id}`}>Pay</Link>
+                    <Link className="btn sm primary" to={`/bursar/payments/new?student=${r.student_id}`}>Pay</Link>
                     {Number(r.outstanding_balance) > 0 && (
                       <button
                         className="btn sm warning"
@@ -961,7 +1045,7 @@ export function ReceiptsHistoryPage() {
             <h2>🧾 Fee Receipts & Payment History</h2>
             <p className="muted">All issued official fee receipts with real-time audit status.</p>
           </div>
-          <Link className="btn primary" to="/admin/finance/payments/new">💳 Record Payment</Link>
+          <Link className="btn primary" to="/bursar/payments/new">💳 Record Payment</Link>
         </div>
 
         {/* Filter controls */}
@@ -1089,11 +1173,31 @@ export function ReceiptsHistoryPage() {
 }
 
 export function FeeStructuresPage() {
-  return <ResourcePage cfg={R.feeStructures} />
+  return (
+    <div className="stack" style={{ gap: 16 }}>
+      <div className="row spread" style={{ alignItems: 'center' }}>
+        <div className="row" style={{ gap: 8 }}>
+          <Link className="btn primary" to="/bursar/structures">📋 Fee Structures</Link>
+          <Link className="btn" to="/bursar/categories">🏷️ Fee Categories</Link>
+        </div>
+      </div>
+      <ResourcePage cfg={R.feeStructures} />
+    </div>
+  )
 }
 
 export function FeeCategoriesPage() {
-  return <ResourcePage cfg={R.feeCategories} />
+  return (
+    <div className="stack" style={{ gap: 16 }}>
+      <div className="row spread" style={{ alignItems: 'center' }}>
+        <div className="row" style={{ gap: 8 }}>
+          <Link className="btn" to="/bursar/structures">📋 Fee Structures</Link>
+          <Link className="btn primary" to="/bursar/categories">🏷️ Fee Categories</Link>
+        </div>
+      </div>
+      <ResourcePage cfg={R.feeCategories} />
+    </div>
+  )
 }
 
 export function ExpensesPage() {

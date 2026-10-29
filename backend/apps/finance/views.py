@@ -23,11 +23,35 @@ from .services import (amount_to_words, calculate_student_fee_balance,
 
 class FeeCategoryViewSet(AuditMixin, viewsets.ModelViewSet):
     permission_classes = [IsFinanceUser]
-    queryset = FeeCategory.objects.all()
+    queryset = FeeCategory.objects.select_related("created_by", "approved_by").all()
     serializer_class = FeeCategorySerializer
     audit_module = "finance"
     search_fields = ["name", "code"]
-    filterset_fields = ["is_active"]
+    filterset_fields = ["is_active", "is_approved"]
+
+    def perform_create(self, serializer):
+        u = self.request.user
+        if u.role == "BURSAR":
+            serializer.save(created_by=u, is_approved=False)
+            audit(self.request, "CREATE_CATEGORY_PENDING", "finance", f"Bursar requested fee category: {serializer.validated_data.get('name')}")
+        else:
+            serializer.save(created_by=u, is_approved=True, approved_by=u, approved_at=timezone.now())
+            audit(self.request, "CREATE_CATEGORY", "finance", f"Admin created fee category: {serializer.validated_data.get('name')}")
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAdmin])
+    def approve(self, request, pk=None):
+        cat = self.get_object()
+        cat.is_approved = True
+        cat.approved_by = request.user
+        cat.approved_at = timezone.now()
+        cat.save(update_fields=["is_approved", "approved_by", "approved_at"])
+        audit(request, "APPROVE_CATEGORY", "finance", f"Approved fee category: {cat.name}")
+        return Response(FeeCategorySerializer(cat).data)
+
+    @action(detail=False, methods=["get"])
+    def pending(self, request):
+        pending_cats = self.get_queryset().filter(is_approved=False)
+        return Response(FeeCategorySerializer(pending_cats, many=True).data)
 
 
 class FeeStructureViewSet(AuditMixin, viewsets.ModelViewSet):
@@ -38,7 +62,15 @@ class FeeStructureViewSet(AuditMixin, viewsets.ModelViewSet):
     filterset_fields = ["academic_year", "term", "school_class", "section", "category"]
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        from apps.academics.models import AcademicYear
+        term = serializer.validated_data.get("term")
+        academic_year = serializer.validated_data.get("academic_year")
+        if not academic_year:
+            if term and getattr(term, "year", None):
+                academic_year = term.year
+            else:
+                academic_year = AcademicYear.objects.filter(is_active=True).first() or AcademicYear.objects.first()
+        serializer.save(created_by=self.request.user, academic_year=academic_year)
 
 
 class StudentFeeAdjustmentViewSet(AuditMixin, viewsets.ModelViewSet):
@@ -53,13 +85,29 @@ class StudentFeeAdjustmentViewSet(AuditMixin, viewsets.ModelViewSet):
 
 
 class FeePaymentViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsFinanceUser]
+    permission_classes = [permissions.IsAuthenticated]
     queryset = FeePayment.objects.select_related(
         "student__stream__school_class", "academic_year", "term", "received_by"
     ).prefetch_related("allocations__category").all()
     serializer_class = FeePaymentSerializer
     filterset_fields = ["student", "academic_year", "term", "payment_method", "is_reversed", "received_by"]
     search_fields = ["receipt_no", "student__first_name", "student__last_name", "student__index_no", "payer_name", "payer_phone"]
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve", "receipt"):
+            return [permissions.IsAuthenticated()]
+        return [IsFinanceUser()]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if not user or not user.is_authenticated:
+            return qs.none()
+        if user.role in ("ADMIN", "BURSAR", "DEVELOPER") or user.is_superuser:
+            return qs
+        if user.role == "PARENT":
+            return qs.filter(student__parents=user)
+        return qs.none()
 
     @action(detail=False, methods=["post"], url_path="record-payment")
     def record_payment(self, request):
@@ -107,8 +155,11 @@ class FeePaymentViewSet(viewsets.ReadOnlyModelViewSet):
         payment = self.get_object()
         data = FeePaymentSerializer(payment).data
         data["amount_words"] = amount_to_words(payment.amount)
-        data["school_name"] = "ST. JOSEPH'S SECONDARY SCHOOL"
-        data["school_contact"] = "P.O. Box 102, Kampala · Tel: +256 700 000 000"
+        from apps.academics.models import SchoolProfile
+        profile = SchoolProfile.get()
+        data["school_name"] = profile.name if (profile.name and profile.name != "Our School") else "ST. JOSEPH'S SECONDARY SCHOOL"
+        data["school_contact"] = f"{profile.address} · Tel: {profile.phone}" if profile.phone else "P.O. Box 102, Kampala · Tel: +256 700 000 000"
+        data["motto"] = profile.motto or "**Search for wisdom**"
         return Response(data)
 
 
@@ -159,12 +210,19 @@ def student_fee_accounts(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsFinanceUser])
+@permission_classes([permissions.IsAuthenticated])
 def student_fee_statement(request, student_id):
     """Full statement of charges, adjustments, and receipts for a student."""
     student = Student.objects.select_related("stream__school_class").filter(pk=student_id).first()
     if not student:
         return Response({"detail": "Student not found."}, status=404)
+
+    # Permission check: Admin, Bursar, or Parent of this student
+    if request.user.role == "PARENT":
+        if not student.parents.filter(pk=request.user.pk).exists():
+            return Response({"detail": "You do not have permission to view this student's account statement."}, status=403)
+    elif request.user.role not in ("ADMIN", "BURSAR"):
+        return Response({"detail": "You do not have permission to perform this action."}, status=403)
 
     term_id = request.query_params.get("term")
     term = Term.objects.filter(pk=term_id).first() if term_id else Term.objects.filter(is_active=True).first()

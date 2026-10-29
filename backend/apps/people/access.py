@@ -7,7 +7,7 @@ from .models import Student
 def visible_students(user):
     qs = Student.objects.select_related("stream__school_class")
     role = user.role
-    if role == "ADMIN":
+    if role in ("ADMIN", "BURSAR"):
         return qs
     if role == "PARENT":
         return qs.filter(parents=user, is_archived=False)

@@ -1348,15 +1348,10 @@ export function AdminStudentReportsPage() {
           </div>
 
           <div className="report-card-print-container">
-            {printStudents.map((st, idx) => (
+            {printStudents.map((st) => (
               <div
                 key={st.id}
-                style={{
-                  pageBreakBefore: idx === 0 ? 'avoid' : 'always',
-                  breakBefore: idx === 0 ? 'avoid' : 'page',
-                  pageBreakAfter: idx === printStudents.length - 1 ? 'auto' : 'always',
-                  breakAfter: idx === printStudents.length - 1 ? 'auto' : 'page',
-                }}
+                className="report-card-page-wrapper"
               >
                 {reportType === 'mid_term' ? <MidTermReportCard student={st} school={school} /> : <SingleReportCard student={st} school={school} />}
               </div>

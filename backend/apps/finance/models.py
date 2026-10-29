@@ -11,6 +11,10 @@ class FeeCategory(models.Model):
     code = models.CharField(max_length=30, unique=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True, db_index=True)
+    is_approved = models.BooleanField(default=True, db_index=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    approved_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -82,6 +86,8 @@ class PaymentMethod(models.TextChoices):
     CASH = "CASH", "Cash"
     BANK = "BANK", "Bank Deposit / Transfer"
     MOBILE_MONEY = "MOBILE_MONEY", "Mobile Money"
+    MTN_MOBILE_MONEY = "MTN_MOBILE_MONEY", "MTN Mobile Money"
+    AIRTEL_MONEY = "AIRTEL_MONEY", "Airtel Money"
     OTHER = "OTHER", "Other"
 
 
@@ -99,7 +105,7 @@ class FeePayment(models.Model):
     academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name="fee_payments")
     term = models.ForeignKey(Term, on_delete=models.PROTECT, related_name="fee_payments")
     amount = models.DecimalField(max_digits=12, decimal_places=2)
-    payment_method = models.CharField(max_length=15, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
     transaction_reference = models.CharField(max_length=100, blank=True)
     payer_name = models.CharField(max_length=150)
     payer_type = models.CharField(max_length=15, choices=PayerType.choices, default=PayerType.PARENT)
@@ -147,7 +153,7 @@ class Expense(models.Model):
     category = models.CharField(max_length=20, choices=Category.choices, default=Category.OTHER)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     date = models.DateField(db_index=True)
-    payment_method = models.CharField(max_length=15, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
     recipient = models.CharField(max_length=150)
     receipt_voucher = models.CharField(max_length=100, blank=True)
     notes = models.TextField(blank=True)

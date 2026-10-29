@@ -22,13 +22,13 @@ const ServerError = lz(() => import('./pages/ErrorPages'), 'ServerError')
 const OfflinePage = lz(() => import('./pages/ErrorPages'), 'OfflinePage')
 const Maintenance = lz(() => import('./pages/ErrorPages'), 'Maintenance')
 const A = {}
-;['AdminDashboard', 'ClassesPage', 'SubjectsPage', 'TeacherAssignmentsPage', 'AcademicsPage', 'GradingPage', 'RecycleBinPage', 'SchoolSettings', 'ImportPanel', 'AdminStudentReportsPage'].forEach((n) => { A[n] = lz(() => import('./features/admin'), n) })
+;['AdminDashboard', 'ClassesPage', 'SubjectsPage', 'TeacherAssignmentsPage', 'AcademicsPage', 'GradingPage', 'RecycleBinPage', 'SchoolSettings', 'ImportPanel', 'AdminStudentReportsPage', 'BursarManagementPage'].forEach((n) => { A[n] = lz(() => import('./features/admin'), n) })
 const S = {}
 ;['StudentProfile', 'ClassResults', 'NotificationsPage', 'EventsPage', 'Enquiries', 'ParentProfile'].forEach((n) => { S[n] = lz(() => import('./features/Shared'), n) })
 const T = {}
 ;['TeacherDashboard', 'Attendance', 'Marks'].forEach((n) => { T[n] = lz(() => import('./features/teacher'), n) })
 const P = {}
-;['ParentDashboard', 'ChildrenList', 'ParentAttendance', 'ParentResults', 'ParentPerformance'].forEach((n) => { P[n] = lz(() => import('./features/parent'), n) })
+;['ParentDashboard', 'ChildrenList', 'ParentAttendance', 'ParentResults', 'ParentPerformance', 'ParentFees'].forEach((n) => { P[n] = lz(() => import('./features/parent'), n) })
 const D = {}
 ;['DevDashboard', 'DevErrors', 'DevLogs', 'DevTests', 'DevDatabase', 'DevApi', 'DevPwa', 'DevSync', 'DevAdminAccounts', 'DevMaintenance', 'DevUpdates', 'DevAudit', 'DevBackup'].forEach((n) => { D[n] = lz(() => import('./features/developer'), n) })
 const F = {}
@@ -115,6 +115,7 @@ export default function App() {
           <Route path="/bursar/receipts" element={<F.ReceiptsHistoryPage />} />
           <Route path="/bursar/my-collections" element={<B.BursarMyCollections />} />
           <Route path="/bursar/structures" element={<F.FeeStructuresPage />} />
+          <Route path="/bursar/categories" element={<F.FeeCategoriesPage />} />
           <Route path="/bursar/expenses" element={<F.ExpensesPage />} />
           <Route path="/bursar/reports" element={<F.FinancialReportsPage />} />
           <Route path="/bursar/notifications" element={<S.NotificationsPage />} />
@@ -129,6 +130,7 @@ export default function App() {
         <Route element={<RequireRole roles={['PARENT']} />}><Route element={<Shell />}>
           <Route path="/parent" element={<P.ParentDashboard />} /><Route path="/parent/children" element={<P.ChildrenList />} /><Route path="/parent/children/:id" element={<S.StudentProfile />} />
           <Route path="/parent/attendance" element={<ParentAttendanceNote />} /><Route path="/parent/results" element={<P.ParentResults />} /><Route path="/parent/performance" element={<P.ParentPerformance />} />
+          <Route path="/parent/fees" element={<P.ParentFees />} />
           <Route path="/parent/timetable" element={<MyTimetable />} /><Route path="/parent/events" element={<S.EventsPage />} /><Route path="/parent/notifications" element={<S.NotificationsPage />} /><Route path="/parent/enquiries" element={<S.Enquiries />} /><Route path="/parent/profile" element={<S.ParentProfile />} />
         </Route></Route>
 
