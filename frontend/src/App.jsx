@@ -104,6 +104,13 @@ export default function App() {
           <Route path="/admin/timetable" element={rp(R.timetable)} /><Route path="/admin/events" element={rp(R.events)} /><Route path="/admin/notifications" element={<S.NotificationsPage />} />
           <Route path="/admin/enquiries" element={<S.Enquiries />} /><Route path="/admin/analytics" element={<A.AdminDashboard view="analytics" />} />
           <Route path="/admin/finance" element={<F.FinanceOverview />} />
+          <Route path="/admin/finance/payments/new" element={<F.RecordPaymentPage />} />
+          <Route path="/admin/finance/payment/new" element={<F.RecordPaymentPage />} />
+          <Route path="/admin/finance/payments" element={<F.ReceiptsHistoryPage />} />
+          <Route path="/admin/finance/accounts" element={<F.StudentAccountsPage />} />
+          <Route path="/admin/finance/receipts" element={<F.ReceiptsHistoryPage />} />
+          <Route path="/admin/payments/new" element={<F.RecordPaymentPage />} />
+          <Route path="/admin/accounts" element={<F.StudentAccountsPage />} />
           <Route path="/admin/bursars" element={<A.BursarManagementPage />} />
           <Route path="/admin/settings" element={<A.SchoolSettings />} /><Route path="/admin/users" element={rp(R.users)} /><Route path="/admin/audit" element={rp(R.audit)} />
         </Route></Route>
@@ -111,6 +118,8 @@ export default function App() {
         <Route element={<RequireRole roles={['BURSAR']} />}><Route element={<Shell />}>
           <Route path="/bursar" element={<B.BursarDashboard />} />
           <Route path="/bursar/payments/new" element={<F.RecordPaymentPage />} />
+          <Route path="/bursar/payment/new" element={<F.RecordPaymentPage />} />
+          <Route path="/bursar/payments" element={<F.ReceiptsHistoryPage />} />
           <Route path="/bursar/accounts" element={<F.StudentAccountsPage />} />
           <Route path="/bursar/receipts" element={<F.ReceiptsHistoryPage />} />
           <Route path="/bursar/my-collections" element={<B.BursarMyCollections />} />

@@ -404,6 +404,8 @@ export function FinanceOverview() {
 
 export function RecordPaymentPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const accountsBase = user?.role === 'ADMIN' ? '/admin/finance/accounts' : '/bursar/accounts'
   const { terms, active } = useTerms()
   const [sp] = useSearchParams()
   const preStudentId = sp.get('student')
@@ -503,7 +505,7 @@ export function RecordPaymentPage() {
       <section className="panel" style={{ maxWidth: 840, margin: '0 auto', width: '100%' }}>
         <div className="panel-head">
           <h2>💳 Record Student Fee Payment</h2>
-          <Link className="btn sm" to="/bursar/accounts">← Student Accounts</Link>
+          <Link className="btn sm" to={accountsBase}>← Student Accounts</Link>
         </div>
 
         {saveError && <Alert kind="error">{saveError}</Alert>}
@@ -713,7 +715,7 @@ export function RecordPaymentPage() {
           paymentId={newReceiptId}
           onClose={() => {
             setNewReceiptId(null)
-            navigate('/bursar/accounts')
+            navigate(accountsBase)
           }}
         />
       )}
@@ -722,6 +724,8 @@ export function RecordPaymentPage() {
 }
 
 export function StudentAccountsPage() {
+  const { user } = useAuth()
+  const paymentBase = user?.role === 'ADMIN' ? '/admin/finance/payments/new' : '/bursar/payments/new'
   const [sp, setSp] = useSearchParams()
   const { terms, active } = useTerms()
   const classesFetch = useFetch('/academics/classes/')
@@ -772,7 +776,7 @@ export function StudentAccountsPage() {
             <h2>👥 Student Fee Accounts</h2>
             <p className="muted">Track student billing, total paid, and outstanding balances per class and term.</p>
           </div>
-          <Link className="btn primary" to="/bursar/payments/new">💳 Record Payment</Link>
+          <Link className="btn primary" to={paymentBase}>💳 Record Payment</Link>
         </div>
 
         {reminderNotice && (
@@ -879,7 +883,7 @@ export function StudentAccountsPage() {
                 render: (r) => (
                   <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
                     <button className="btn sm" onClick={() => setStatementStudentId(r.student_id)}>Statement</button>
-                    <Link className="btn sm primary" to={`/bursar/payments/new?student=${r.student_id}`}>Pay</Link>
+                    <Link className="btn sm primary" to={`${paymentBase}?student=${r.student_id}`}>Pay</Link>
                     {Number(r.outstanding_balance) > 0 && (
                       <button
                         className="btn sm warning"
@@ -1016,6 +1020,8 @@ function StatementModal({ studentId, termId, onClose, onViewReceipt }) {
 }
 
 export function ReceiptsHistoryPage() {
+  const { user } = useAuth()
+  const paymentBase = user?.role === 'ADMIN' ? '/admin/finance/payments/new' : '/bursar/payments/new'
   const { terms, active } = useTerms()
   const [termId, setTermId] = useState(active?.id || '')
   const [search, setSearch] = useState('')
@@ -1045,7 +1051,7 @@ export function ReceiptsHistoryPage() {
             <h2>🧾 Fee Receipts & Payment History</h2>
             <p className="muted">All issued official fee receipts with real-time audit status.</p>
           </div>
-          <Link className="btn primary" to="/bursar/payments/new">💳 Record Payment</Link>
+          <Link className="btn primary" to={paymentBase}>💳 Record Payment</Link>
         </div>
 
         {/* Filter controls */}

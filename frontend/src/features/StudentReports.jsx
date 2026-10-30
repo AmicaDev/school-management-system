@@ -83,14 +83,76 @@ const compVal = (objs, ...cands) => {
   return null
 }
 
-export function ALevelReportCard({ student, school, isMidTerm = false }) {
+export const STANDARD_A_LEVEL_SUBJECTS = [
+  { name: 'MATHEMATICS', keys: ['MATHEMATICS', 'MATH', 'MTC'] },
+  { name: 'CHEMISTRY', keys: ['CHEMISTRY', 'CHEM'] },
+  { name: 'BIOLOGY', keys: ['BIOLOGY', 'BIO'] },
+  { name: 'PHYSICS', keys: ['PHYSICS', 'PHY'] },
+  { name: 'HISTORY', keys: ['HISTORY', 'HIST'] },
+  { name: 'GEOGRAPHY', keys: ['GEOGRAPHY', 'GEOG', 'GEO'] },
+  { name: 'DIVINITY', keys: ['DIVINITY', 'DIV', 'CRE', 'IRE', 'RELIGIOUS'] },
+  { name: 'ENTREPRENUERSHIP', keys: ['ENTREPRENUERSHIP', 'ENTREPRENEURSHIP', 'ENT'] },
+  { name: 'AGRICULTURE', keys: ['AGRICULTURE', 'AGRIC', 'AGR'] },
+  { name: 'LUGANDA', keys: ['LUGANDA', 'LUG'] },
+  { name: 'FOODS & NUTRITION', keys: ['FOODSANDNUTRITION', 'FOODNUTRITION', 'FOODS', 'FN'] },
+  { name: 'FINE ART', keys: ['FINEART', 'ART'] },
+  { name: 'G. P', keys: ['GP', 'GENERALPAPER', 'GENERAL'] },
+  { name: 'I.C. T', keys: ['ICT', 'SUBICT', 'SUBSIDIARYICT', 'COMPUTER'] },
+  { name: 'SUB.MATHEMATICS', keys: ['SUBMATHEMATICS', 'SUBSIDIARYMATH', 'SUBSIDIARYMATHEMATICS', 'SUBMATH'] },
+]
+
+export function checkIsALevel(...vals) {
+  const combined = vals.filter(Boolean).map(String).join(' ').toLowerCase()
+  if (!combined) return false
+  return (
+    /\b(s\.?[56]|senior\s*(?:5|6|five|six|v|vi)|form\s*(?:5|6|v|vi)|a[\s\-_']?level|advanced\s*level|hsc)\b/i.test(combined) ||
+    combined.includes('senior five') ||
+    combined.includes('senior six') ||
+    combined.includes('s.5') ||
+    combined.includes('s.6') ||
+    combined.includes('s5') ||
+    combined.includes('s6')
+  )
+}
+
+export function ALevelReportCard({ student, school, className, isMidTerm = false }) {
   const report = student.report || {}
   const subjects = report.subjects || []
   const logoSrc = '/kiyingi_logo.png'
-  const combSubjects = subjects.slice(0, 5)
+
+  const norm = (s) => String(s || '').toUpperCase().replace(/[^A-Z]/g, '')
+  const matchedKeys = new Set()
+
+  const displaySubjects = STANDARD_A_LEVEL_SUBJECTS.map((std) => {
+    const found = subjects.find((s) => {
+      const sName = norm(s.subject)
+      const sCode = norm(s.code)
+      return std.keys.some((k) => norm(k) === sName || (sCode && norm(k) === sCode))
+    })
+    if (found) {
+      const k = found.subject_id != null ? String(found.subject_id) : found.subject
+      matchedKeys.add(k)
+      return { ...found, displayName: std.name }
+    }
+    return { subject: std.name, displayName: std.name, isPlaceholder: true }
+  })
+
+  // Append any extra subjects student has that aren't in the standard 15 (e.g. ECONOMICS, LITERATURE)
+  subjects.forEach((s) => {
+    const k = s.subject_id != null ? String(s.subject_id) : s.subject
+    if (!matchedKeys.has(k)) {
+      displaySubjects.push({ ...s, displayName: s.subject?.toUpperCase() })
+    }
+  })
+
+  const studentActualSubjects = subjects.filter((s) => !s.isPlaceholder && (s.total != null || (s.papers && Object.keys(s.papers).length > 0) || s.grade || s.eot_score != null || s.mid_score != null))
+  const combSubjects = (studentActualSubjects.length > 0 ? studentActualSubjects : subjects).slice(0, 4)
+
+  const studentName = (student.name || `${student.first_name || ''} ${student.last_name || ''}`.trim() || student.full_name || '').toUpperCase()
+  const studentClass = (className || report.class_name || student.class_name || student.stream_label || 'SENIOR FIVE').toUpperCase()
 
   return (
-    <article className="report-card-print-page a-level-report-card">
+    <article className="a-level-report-card">
       {/* Top Header matching reference image */}
       <div className="al-header">
         <div className="al-logo-wrap">
@@ -112,6 +174,8 @@ export function ALevelReportCard({ student, school, isMidTerm = false }) {
         </div>
       </div>
 
+      <div className="al-divider-line" />
+
       {/* Card Term Title */}
       <div className="al-term-title">
         <u>
@@ -123,8 +187,8 @@ export function ALevelReportCard({ student, school, isMidTerm = false }) {
 
       {/* Student Details */}
       <div className="al-student-bio">
-        <div><b>NAME:</b> &nbsp;{student.name?.toUpperCase()}</div>
-        <div><b>CLASS:</b> &nbsp;{(report.class_name || student.stream_label || 'SENIOR FIVE').toUpperCase()}</div>
+        <div><b>NAME:</b> &nbsp;{studentName}</div>
+        <div><b>CLASS:</b> &nbsp;{studentClass}</div>
       </div>
 
       {/* Performance Records Title */}
@@ -135,26 +199,27 @@ export function ALevelReportCard({ student, school, isMidTerm = false }) {
         <thead>
           <tr>
             <th rowSpan="2" style={{ width: '31%', textAlign: 'left' }}>SUBJECT</th>
-            <th colSpan="3" style={{ width: '27%' }}>SCORES</th>
-            <th rowSpan="2" style={{ width: '13%' }}>GRADE</th>
-            <th rowSpan="2" style={{ width: '17%' }}>COMMENT</th>
-            <th rowSpan="2" style={{ width: '12%' }}>INITIALS</th>
+            <th colSpan="3" style={{ width: '27%', textAlign: 'center' }}>SCORES</th>
+            <th rowSpan="2" style={{ width: '13%', textAlign: 'center' }}>GRADE</th>
+            <th rowSpan="2" style={{ width: '17%', textAlign: 'center' }}>COMMENT</th>
+            <th rowSpan="2" style={{ width: '12%', textAlign: 'center' }}>INITIALS</th>
           </tr>
           <tr>
-            <th style={{ width: '9%' }}>PP1</th>
-            <th style={{ width: '9%' }}>PP2</th>
-            <th style={{ width: '9%' }}>PP3</th>
+            <th style={{ width: '9%', textAlign: 'center' }}>PP1</th>
+            <th style={{ width: '9%', textAlign: 'center' }}>PP2</th>
+            <th style={{ width: '9%', textAlign: 'center' }}>PP3</th>
           </tr>
         </thead>
         <tbody>
-          {subjects.length ? subjects.map((sub, i) => {
+          {displaySubjects.map((sub, i) => {
             const papersObj = sub.papers || {}
             const allComps = { ...(sub.raw_components || {}), ...(sub.components || {}) }
 
             const getPaper = (n) => {
+              if (sub.isPlaceholder) return null
               if (papersObj[n] != null) return Number(papersObj[n])
               if (papersObj[String(n)] != null) return Number(papersObj[String(n)])
-              const targets = [`PP${n}`, `P${n}`, `PAPER${n}`, `PAPER_${n}`, `PAPER ${n}`, `PP_${n}`]
+              const targets = [`PP${n}`, `P${n}`, `PAPER${n}`, `PAPER_${n}`, `PAPER ${n}`, `PP_${n}`, `${n}`]
               for (const [k, v] of Object.entries(allComps)) {
                 const clean = k.toUpperCase().replace(/[^A-Z0-9]/g, '')
                 if (targets.some((t) => t.replace(/[^A-Z0-9]/g, '') === clean)) {
@@ -169,30 +234,36 @@ export function ALevelReportCard({ student, school, isMidTerm = false }) {
             let pp2 = getPaper(2)
             let pp3 = getPaper(3)
 
-            if (pp1 == null && pp2 == null && pp3 == null) {
+            if (pp1 == null && pp2 == null && pp3 == null && !sub.isPlaceholder) {
               if (sub.total != null && !isNaN(Number(sub.total))) {
                 pp1 = Number(sub.total)
-              } else if (sub.eot_score != null) {
+              } else if (sub.eot_score != null && !isNaN(Number(sub.eot_score))) {
                 pp1 = Number(sub.eot_score)
-              } else if (sub.mid_score != null) {
+              } else if (sub.mid_score != null && !isNaN(Number(sub.mid_score))) {
                 pp1 = Number(sub.mid_score)
               }
             }
 
-            const recScores = [pp1, pp2, pp3].filter((val) => val != null && !isNaN(val))
-            // (GRADE = PP1 + PP2 + PP3 / number of papers its marks recorded)
+            const recScores = [pp1, pp2, pp3].filter((val) => val != null && !isNaN(val) && val !== '')
+            // Paper averaging:
+            // GRADE = (sum of marks of recorded papers) / (number of recorded papers)
             const avgScore = recScores.length > 0
-              ? Math.round(recScores.reduce((a, b) => a + b, 0) / recScores.length)
+              ? Math.round(recScores.reduce((a, b) => a + Number(b), 0) / recScores.length)
               : null
 
-            // NOTE: Grading scale uses O level grading scale (A, B, C, D, E)
+            // A-Level Standard scale mapped to the calculated average:
+            // 80 – 100: A (EXCELLENT)
+            // 70 – 79: B (VERY GOOD)
+            // 60 – 69: C (GOOD)
+            // 50 – 59: D (FAIR)
+            // 0 – 49: E (POOR)
             const grade = avgScore != null ? gradePreview(avgScore) : (sub.grade || '')
             const comment = grade ? remarkPreview(grade) : (sub.remark || '')
-            const initials = sub.teacher_initials || sub.initials || 'KM'
+            const initials = sub.teacher_initials || sub.initials || (recScores.length > 0 ? 'KM' : '')
 
             return (
-              <tr key={sub.subject_id || i}>
-                <td className="al-sub-name">{sub.subject?.toUpperCase()}</td>
+              <tr key={sub.displayName || sub.subject_id || i}>
+                <td className="al-sub-name">{sub.displayName}</td>
                 <td className="al-center">{pp1 != null ? pp1 : ''}</td>
                 <td className="al-center">{pp2 != null ? pp2 : ''}</td>
                 <td className="al-center">{pp3 != null ? pp3 : ''}</td>
@@ -201,9 +272,7 @@ export function ALevelReportCard({ student, school, isMidTerm = false }) {
                 <td className="al-center">{initials}</td>
               </tr>
             )
-          }) : (
-            <tr><td colSpan="7" style={{ textAlign: 'center', padding: 12 }}>No assessment marks recorded for this term.</td></tr>
-          )}
+          })}
         </tbody>
       </table>
 
@@ -212,16 +281,16 @@ export function ALevelReportCard({ student, school, isMidTerm = false }) {
       <table className="al-comb-table">
         <tbody>
           <tr>
-            <td style={{ width: '23%' }}></td>
-            {[0, 1, 2, 3, 4].map((idx) => (
-              <td key={idx} style={{ width: '15.4%', textAlign: 'center', fontWeight: 700 }}>
+            <td style={{ width: '20%' }}></td>
+            {[0, 1, 2, 3].map((idx) => (
+              <td key={idx} style={{ width: '20%', textAlign: 'center', fontWeight: 700 }}>
                 {combSubjects[idx]?.code || combSubjects[idx]?.subject?.slice(0, 5).toUpperCase() || ''}
               </td>
             ))}
           </tr>
           <tr>
-            <td style={{ width: '23%', fontWeight: 800 }}>POINTS</td>
-            {[0, 1, 2, 3, 4].map((idx) => {
+            <td style={{ width: '20%', fontWeight: 800 }}>POINTS</td>
+            {[0, 1, 2, 3].map((idx) => {
               const sub = combSubjects[idx]
               let pts = ''
               if (sub) {
@@ -231,7 +300,7 @@ export function ALevelReportCard({ student, school, isMidTerm = false }) {
                 pts = g === 'A' ? 6 : g === 'B' ? 5 : g === 'C' ? 4 : g === 'D' ? 3 : g === 'E' ? 2 : ''
               }
               return (
-                <td key={idx} style={{ width: '15.4%', textAlign: 'center', fontWeight: 800 }}>
+                <td key={idx} style={{ width: '20%', textAlign: 'center', fontWeight: 800 }}>
                   {pts}
                 </td>
               )
@@ -265,13 +334,22 @@ export function ALevelReportCard({ student, school, isMidTerm = false }) {
   )
 }
 
-export function SingleReportCard({ student, school }) {
+export function SingleReportCard({ student, school, className }) {
   const report = student.report || {}
-  const subjects = report.subjects || []
-  const isALevel = /s\.?[56]|senior\s*[56]/i.test(report.class_name || student.stream_label || '')
+  const isALevel = checkIsALevel(
+    className,
+    report.class_name,
+    student.class_name,
+    student.stream_label,
+    student.stream_name,
+    student.class_obj?.name,
+    student.grade_level
+  )
   if (isALevel) {
-    return <ALevelReportCard student={student} school={school} isMidTerm={false} />
+    return <ALevelReportCard student={student} school={school} className={className} isMidTerm={false} />
   }
+
+  const subjects = report.subjects || []
 
   const logoSrc = '/kiyingi_logo.png'
   const studentPhoto = student.photo ? mediaUrl(student.photo) : null
@@ -723,11 +801,19 @@ export function SingleReportCard({ student, school }) {
 /* =====================================================================
    Mid-Term Report Card (A4) — columns: Subject | 20 (Mid-Term) | C1 | AVG | IDENT | DESCRIPTOR | TR INITIALS
    ===================================================================== */
-export function MidTermReportCard({ student, school }) {
+export function MidTermReportCard({ student, school, className }) {
   const report = student.report || {}
-  const isALevel = /s\.?[56]|senior\s*[56]/i.test(report.class_name || student.stream_label || '')
+  const isALevel = checkIsALevel(
+    className,
+    report.class_name,
+    student.class_name,
+    student.stream_label,
+    student.stream_name,
+    student.class_obj?.name,
+    student.grade_level
+  )
   if (isALevel) {
-    return <ALevelReportCard student={student} school={school} isMidTerm={true} />
+    return <ALevelReportCard student={student} school={school} className={className} isMidTerm={true} />
   }
 
   const subjects = report.subjects || []
@@ -1353,7 +1439,11 @@ export function AdminStudentReportsPage() {
                 key={st.id}
                 className="report-card-page-wrapper"
               >
-                {reportType === 'mid_term' ? <MidTermReportCard student={st} school={school} /> : <SingleReportCard student={st} school={school} />}
+                {reportType === 'mid_term' ? (
+                  <MidTermReportCard student={st} school={school} className={activeClass?.name} />
+                ) : (
+                  <SingleReportCard student={st} school={school} className={activeClass?.name} />
+                )}
               </div>
             ))}
           </div>

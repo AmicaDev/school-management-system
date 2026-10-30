@@ -313,6 +313,9 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
   line-height: 1.25;
   box-sizing: border-box;
   overflow: hidden;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color-adjust: exact !important;
 }
 .a-level-report-card::after {
   content: '';
@@ -384,6 +387,10 @@ table.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
   font-style: italic;
   color: #000000;
   margin: 2px 0 4px;
+}
+.al-divider-line {
+  border-bottom: 1.5px solid #000000;
+  margin: 4px 0 6px;
 }
 .al-term-title {
   text-align: center;
